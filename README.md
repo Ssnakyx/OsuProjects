@@ -3,7 +3,6 @@
 A side-by-side replay comparison tool for **osu! standard** built with Python and pygame.  
 Load two `.osr` replay files alongside a beatmap and watch both cursors play simultaneously — with live score, combo, hit sounds, and a clean osu! lazer-inspired UI.
 
-![Preview placeholder — replace with a screenshot]()
 
 ---
 
@@ -35,7 +34,7 @@ Load two `.osr` replay files alongside a beatmap and watch both cursors play sim
 ### 1 — Clone the repository
 
 ```bash
-git clone https://github.com/your-username/OsuProject.git
+git clone https://github.com/Ssnakyx/OsuProjects.git
 cd OsuProject
 ```
 
