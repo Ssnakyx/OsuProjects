@@ -44,6 +44,15 @@ def main() -> None:
                 elif event.key == pygame.K_PERIOD:
                     renderer.adjust_sfx_vol(+0.1)
 
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                renderer.handle_mouse_down(event.pos, event.button)
+            elif event.type == pygame.MOUSEBUTTONUP:
+                renderer.handle_mouse_up()
+            elif event.type == pygame.MOUSEMOTION:
+                renderer.handle_mouse_motion(event.pos)
+            elif event.type == pygame.MOUSEWHEEL:
+                renderer.handle_scroll(pygame.mouse.get_pos(), event.y)
+
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
                 renderer.screen = screen

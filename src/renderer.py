@@ -113,6 +113,20 @@ class Renderer:
         # Live score timeline — one entry per loaded replay
         self._score_events: List[List] = []
 
+        # Interactive UI state
+        self._dragging:      Optional[str]        = None
+        self._hover:         Optional[str]        = None
+        self._music_bar_x:   int                  = 0
+        self._music_bar_w:   int                  = 0
+        self._sfx_bar_x:     int                  = 0
+        self._sfx_bar_w:     int                  = 0
+        self._bar_y:          int                  = 0
+        self._prog_bar_x:    int                  = 0
+        self._prog_bar_w:    int                  = 0
+        self._prog_bar_y:    int                  = 0
+        self._mode_btn_rect: Optional[pygame.Rect] = None
+        self._cursor_hand:   bool                  = False
+
         # Font cache for combo numbers (keyed by pixel size)
         self._font_cache: Dict[int, pygame.font.Font] = {}
 
@@ -488,7 +502,7 @@ class Renderer:
         self.screen.fill(config.BG_COLOR)
         W, H = self.screen.get_size()
         UI_TOP    = 72
-        UI_BOTTOM = 28
+        UI_BOTTOM = 32
 
         if self.mode == "OVERLAY":
             field = (0, UI_TOP, W, H - UI_TOP - UI_BOTTOM)
@@ -829,25 +843,38 @@ class Renderer:
         self, surf: pygame.Surface,
         x: int, y: int, vol: float,
         label: str, color: Tuple[int, int, int],
-    ) -> None:
+        hover: bool = False,
+    ) -> Tuple[int, int]:
+        BAR_W, BAR_H, KNOB_R = 82, 6, 7
+        bright: Tuple[int, int, int] = (
+            min(255, int(color[0] * 1.25)),
+            min(255, int(color[1] * 1.25)),
+            min(255, int(color[2] * 1.25)),
+        )
+        fill_col = bright if hover else color
         lbl = self.font_xs.render(label, True, config.TEXT_DIM)
         surf.blit(lbl, (x, y - lbl.get_height() // 2))
         bx = x + lbl.get_width() + 6
-        bw, bh = 54, 3
-        by = y - bh // 2
-        pygame.draw.rect(surf, (38, 37, 54), (bx, by, bw, bh), border_radius=2)
-        fw = int(bw * vol)
+        by = y - BAR_H // 2
+        track_col = (58, 56, 80) if hover else (38, 37, 54)
+        pygame.draw.rect(surf, track_col, (bx, by, BAR_W, BAR_H), border_radius=3)
+        fw = int(BAR_W * vol)
         if fw > 0:
-            pygame.draw.rect(surf, color, (bx, by, fw, bh), border_radius=2)
-        pct = self.font_xs.render(f"{int(vol * 100)}%", True, color)
-        surf.blit(pct, (bx + bw + 5, y - pct.get_height() // 2))
+            pygame.draw.rect(surf, fill_col, (bx, by, fw, BAR_H), border_radius=3)
+        kx = bx + fw
+        pygame.draw.circle(surf, (215, 215, 235), (kx, y), KNOB_R)
+        pygame.draw.circle(surf, fill_col, (kx, y), KNOB_R - 2)
+        pct = self.font_xs.render(f"{int(vol * 100)}%", True, fill_col)
+        surf.blit(pct, (bx + BAR_W + KNOB_R + 5, y - pct.get_height() // 2))
+        return bx, BAR_W
 
     def _draw_progress(self, surf: pygame.Surface, W: int, H: int) -> None:
-        # Bottom strip background
-        _rounded_box(surf, (0, H - 28, W, 28), (8, 7, 14, 210), radius=0)
-        pygame.draw.line(surf, (40, 39, 56), (0, H - 28), (W, H - 28))
+        BOTTOM_H = 32
+        _rounded_box(surf, (0, H - BOTTOM_H, W, BOTTOM_H), (8, 7, 14, 210), radius=0)
+        pygame.draw.line(surf, (40, 39, 56), (0, H - BOTTOM_H), (W, H - BOTTOM_H))
 
-        mid_y = H - 14   # vertical centre of the strip
+        mid_y = H - 20
+        self._bar_y = mid_y
 
         # Beatmap info – left
         if self.beatmap:
@@ -856,19 +883,31 @@ class Renderer:
             bs = self.font_xs.render(info, True, config.TEXT_DIM)
             surf.blit(bs, (10, mid_y - bs.get_height() // 2))
 
-        # Volume bars – centre
+        # Volume sliders – centre
         CX = W // 2
-        self._draw_vol_bar(surf, CX - 145, mid_y, self._music_volume,
-                           "♫", config.PINK)
-        self._draw_vol_bar(surf, CX + 10,  mid_y, self._sfx_volume,
-                           "SFX", (100, 174, 255))
+        music_hover = self._hover == 'music' or self._dragging == 'music'
+        sfx_hover   = self._hover == 'sfx'   or self._dragging == 'sfx'
+        bx_m, bw_m = self._draw_vol_bar(surf, CX - 155, mid_y,
+                                         self._music_volume, "♫", config.PINK, music_hover)
+        bx_s, bw_s = self._draw_vol_bar(surf, CX + 10, mid_y,
+                                         self._sfx_volume, "SFX", (100, 174, 255), sfx_hover)
+        self._music_bar_x, self._music_bar_w = bx_m, bw_m
+        self._sfx_bar_x,   self._sfx_bar_w   = bx_s, bw_s
 
-        # Mode label – right
+        # Mode button – right (clickable)
         mode_lbl = "OVERLAY" if self.mode == "OVERLAY" else "SIDE BY SIDE"
-        ms = self.font_xs.render(f"TAB  {mode_lbl}", True, config.TEXT_DIM)
-        surf.blit(ms, (W - ms.get_width() - 10, mid_y - ms.get_height() // 2))
+        mode_hover = self._hover == 'mode'
+        ms = self.font_xs.render(f"TAB  {mode_lbl}", True,
+                                  config.TEXT_COLOR if mode_hover else config.TEXT_DIM)
+        btn_x = W - ms.get_width() - 18
+        btn_y = mid_y - ms.get_height() // 2
+        if mode_hover:
+            _rounded_box(surf, (btn_x - 6, btn_y - 3, ms.get_width() + 12, ms.get_height() + 6),
+                        (255, 255, 255, 20), radius=6)
+        surf.blit(ms, (btn_x, btn_y))
+        self._mode_btn_rect = pygame.Rect(btn_x - 6, btn_y - 3, ms.get_width() + 12, ms.get_height() + 6)
 
-        # Progress bar – 3 px line at very bottom
+        # Progress bar – 5 px line at very bottom with draggable knob
         if not self.beatmap or not self.beatmap.hit_objects:
             return
         start = self.playback_origin
@@ -877,9 +916,110 @@ class Renderer:
         if total <= 0:
             return
         prog = max(0.0, min(1.0, (self.current_time - start) / total))
-        bx, by, bw, bh = 0, H - 3, W, 3
+        bx, by, bw, bh = 0, H - 5, W, 5
+        self._prog_bar_x = bx
+        self._prog_bar_w = bw
+        self._prog_bar_y = by + bh // 2
         pygame.draw.rect(surf, (38, 37, 54), (bx, by, bw, bh))
         fw = int(bw * prog)
         if fw > 0:
             pygame.draw.rect(surf, config.PINK, (bx, by, fw, bh))
-        pygame.draw.circle(surf, (255, 255, 255), (bx + fw, by + 1), 5)
+        prog_hover = self._hover == 'progress' or self._dragging == 'progress'
+        knob_r = 7 if prog_hover else 5
+        knob_col = (255, 255, 255) if prog_hover else (210, 210, 230)
+        pygame.draw.circle(surf, knob_col, (bx + fw, by + bh // 2), knob_r)
+
+    # ------------------------------------------------------------------
+    # Mouse interaction
+    # ------------------------------------------------------------------
+
+    def _in_music_bar(self, mx: int, my: int) -> bool:
+        return (self._music_bar_x <= mx <= self._music_bar_x + self._music_bar_w
+                and abs(my - self._bar_y) <= 12)
+
+    def _in_sfx_bar(self, mx: int, my: int) -> bool:
+        return (self._sfx_bar_x <= mx <= self._sfx_bar_x + self._sfx_bar_w
+                and abs(my - self._bar_y) <= 12)
+
+    def _in_prog_bar(self, mx: int, my: int) -> bool:
+        return (self._prog_bar_w > 0
+                and self._prog_bar_x <= mx <= self._prog_bar_x + self._prog_bar_w
+                and abs(my - self._prog_bar_y) <= 14)
+
+    def _in_mode_btn(self, mx: int, my: int) -> bool:
+        return bool(self._mode_btn_rect and self._mode_btn_rect.collidepoint(mx, my))
+
+    def _update_vol_from_x(self, mx: int, which: str) -> None:
+        if which == 'music':
+            vol = max(0.0, min(1.0, (mx - self._music_bar_x) / max(1, self._music_bar_w)))
+            self._music_volume = vol
+            pygame.mixer.music.set_volume(vol)
+        else:
+            vol = max(0.0, min(1.0, (mx - self._sfx_bar_x) / max(1, self._sfx_bar_w)))
+            self._sfx_volume = vol
+            if self._hit_sound:
+                self._hit_sound.set_volume(vol)
+
+    def _seek_from_x(self, mx: int) -> None:
+        if self.state != "PLAYING" or self._prog_bar_w <= 0:
+            return
+        if not self.beatmap or not self.beatmap.hit_objects:
+            return
+        frac  = max(0.0, min(1.0, (mx - self._prog_bar_x) / self._prog_bar_w))
+        start = self.playback_origin
+        end   = self.beatmap.hit_objects[-1].time + 2000
+        self.seek(start + frac * (end - start) - self.current_time)
+
+    def handle_mouse_down(self, pos: Tuple[int, int], button: int) -> None:
+        if button != 1:
+            return
+        mx, my = pos
+        if self._in_music_bar(mx, my):
+            self._dragging = 'music'
+            self._update_vol_from_x(mx, 'music')
+        elif self._in_sfx_bar(mx, my):
+            self._dragging = 'sfx'
+            self._update_vol_from_x(mx, 'sfx')
+        elif self._in_mode_btn(mx, my):
+            self.toggle_mode()
+        elif self._in_prog_bar(mx, my):
+            self._dragging = 'progress'
+            self._seek_from_x(mx)
+
+    def handle_mouse_up(self) -> None:
+        self._dragging = None
+
+    def handle_mouse_motion(self, pos: Tuple[int, int]) -> None:
+        mx, my = pos
+        if self._dragging == 'music':
+            self._update_vol_from_x(mx, 'music')
+        elif self._dragging == 'sfx':
+            self._update_vol_from_x(mx, 'sfx')
+        elif self._dragging == 'progress':
+            self._seek_from_x(mx)
+
+        new_hover: Optional[str] = None
+        if self._in_music_bar(mx, my):
+            new_hover = 'music'
+        elif self._in_sfx_bar(mx, my):
+            new_hover = 'sfx'
+        elif self._in_mode_btn(mx, my):
+            new_hover = 'mode'
+        elif self._in_prog_bar(mx, my):
+            new_hover = 'progress'
+
+        if new_hover != self._hover:
+            self._hover = new_hover
+            want_hand = new_hover is not None
+            if want_hand != self._cursor_hand:
+                pygame.mouse.set_cursor(
+                    pygame.SYSTEM_CURSOR_HAND if want_hand else pygame.SYSTEM_CURSOR_ARROW
+                )
+                self._cursor_hand = want_hand
+
+    def handle_scroll(self, pos: Tuple[int, int], dy: int) -> None:
+        mx, my = pos
+        if self._in_music_bar(mx, my):
+            self.adjust_music_vol(dy * 0.05)
+        elif self._in_sfx_bar(mx, my):
+            self.adjust_sfx_vol(dy * 0.05)
