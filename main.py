@@ -4,6 +4,7 @@ from src.renderer import Renderer
 
 
 def main() -> None:
+    pygame.mixer.pre_init(44100, -16, 2, 1024)   # must be before pygame.init()
     pygame.init()
     screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
     pygame.display.set_caption("osu! Replay Viewer")

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import bisect
 import hashlib
 import os
 import tempfile
 import zipfile
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 import pygame
 
@@ -12,6 +15,7 @@ from . import config
 from .beatmap  import load_beatmap, Beatmap, Circle, Slider, Spinner
 from .replay   import load_replay, Replay, cursor_at
 from .curves   import path_at_t
+from .scoring  import compute_live_scores, score_at, combo_at
 
 Rect = Tuple[int, int, int, int]   # x, y, w, h
 
@@ -32,6 +36,20 @@ def _tinted(color: Tuple[int, int, int], factor: float) -> Tuple[int, int, int]:
     return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
 
 
+def _rounded_box(
+    surf: pygame.Surface,
+    rect: Tuple[int, int, int, int],
+    color: Tuple[int, int, int, int],
+    radius: int = 10,
+) -> None:
+    x, y, w, h = rect
+    if w <= 0 or h <= 0:
+        return
+    tmp = _alpha_surface(w, h)
+    pygame.draw.rect(tmp, color, (0, 0, w, h), border_radius=radius)
+    surf.blit(tmp, (x, y))
+
+
 # ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
@@ -42,11 +60,25 @@ class Renderer:
         self.screen = screen
 
         pygame.font.init()
-        pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(32)
 
-        self.font_lg = pygame.font.SysFont("Arial", 28, bold=True)
-        self.font_md = pygame.font.SysFont("Arial", 20)
-        self.font_sm = pygame.font.SysFont("Arial", 15)
+        def _lf(size: int, bold: bool = False) -> pygame.font.Font:
+            for name in ("Helvetica Neue", "Helvetica", "Segoe UI", "Tahoma", "Verdana"):
+                path = pygame.font.match_font(name, bold=bold)
+                if path:
+                    try:
+                        return pygame.font.Font(path, size)
+                    except Exception:
+                        pass
+            return pygame.font.SysFont("Arial", size, bold=bold)
+
+        self.font_xl    = _lf(46, bold=True)   # "osu!" title
+        self.font_score = _lf(30, bold=True)   # live score digits
+        self.font_lg    = _lf(22, bold=True)   # PAUSED / section headers
+        self.font_time  = _lf(18)              # clock
+        self.font_md    = _lf(14)              # player names / labels
+        self.font_sm    = _lf(12)              # small info
+        self.font_xs    = _lf(10)              # tiny labels
 
         self.state: str = "WAITING"
 
@@ -64,19 +96,24 @@ class Renderer:
         self.paused:          bool  = False
 
         self.combo_colors:         List[Tuple[int, int, int]] = []
-        self.error_msg:            Optional[str]              = None
-        self._candidate_osu_paths: List[str]                  = []
-        self._tmpdir:              Optional[str]              = None
+        self.combo_numbers:        List[int]                 = []
+        self.error_msg:            Optional[str]             = None
+        self._candidate_osu_paths: List[str]                 = []
+        self._tmpdir:              Optional[str]             = None
 
         # Audio
-        self._audio_path:    Optional[str] = None
-        self._audio_started: bool          = False
+        self._audio_path:    Optional[str]               = None
+        self._audio_started: bool                         = False
+        self._hit_sound:    Optional[pygame.mixer.Sound] = None
+        self._next_hit_idx: int                          = 0
 
-        # Skin
-        self._cursor_img:    Optional[pygame.Surface] = None
-        self._cursor_trail:  Optional[pygame.Surface] = None
-        self._cursor_middle: Optional[pygame.Surface] = None
-        self._skin_dir:      Optional[str]            = None
+        # Live score timeline — one entry per loaded replay
+        self._score_events: List[List] = []
+
+        # Font cache for combo numbers (keyed by pixel size)
+        self._font_cache: Dict[int, pygame.font.Font] = {}
+
+        self._load_hit_sound()
 
     # ------------------------------------------------------------------
     # File loading
@@ -94,9 +131,6 @@ class Renderer:
             self._candidate_osu_paths = [path]
         elif ext == ".osz":
             self._handle_osz(path)
-        elif ext == ".osk":
-            self._handle_osk(path)
-            return          # skin loads independently, no need to trigger _try_load
         else:
             self.error_msg = f"Unsupported file type: {ext}"
             return
@@ -126,49 +160,6 @@ class Renderer:
                 self.osu_path = osu_paths[0]
         except zipfile.BadZipFile:
             self.error_msg = "Could not open .osz — file may be corrupted."
-
-    # ---- .osk -----------------------------------------------------------
-
-    def _handle_osk(self, path: str) -> None:
-        try:
-            skin_dir = tempfile.mkdtemp(prefix="osu_rv_skin_")
-            self._skin_dir = skin_dir
-            with zipfile.ZipFile(path, "r") as zf:
-                for name in zf.namelist():
-                    if name.lower().endswith(".png") or name.lower().endswith(".ini"):
-                        zf.extract(name, skin_dir)
-            self._load_skin_images(skin_dir)
-            self.error_msg = None
-        except zipfile.BadZipFile:
-            self.error_msg = "Could not open .osk — file may be corrupted."
-
-    def _load_skin_images(self, skin_dir: str) -> None:
-        def try_img(name: str) -> Optional[pygame.Surface]:
-            for fname in (name.replace(".png", "@2x.png"), name):
-                p = os.path.join(skin_dir, fname)
-                if os.path.isfile(p):
-                    try:
-                        return pygame.image.load(p).convert_alpha()
-                    except Exception:
-                        pass
-            return None
-
-        def scaled(img: pygame.Surface, px: int) -> pygame.Surface:
-            return pygame.transform.smoothscale(img, (px, px))
-
-        r = config.CURSOR_RADIUS
-
-        img = try_img("cursor.png")
-        if img:
-            self._cursor_img = scaled(img, r * 4)
-
-        trail = try_img("cursortrail.png")
-        if trail:
-            self._cursor_trail = scaled(trail, r * 3)
-
-        mid = try_img("cursor-middle.png")
-        if mid:
-            self._cursor_middle = scaled(mid, r * 2)
 
     # ---- trigger --------------------------------------------------------
 
@@ -204,6 +195,9 @@ class Renderer:
 
             self.beatmap = load_beatmap(self.osu_path)   # type: ignore[arg-type]
             self._build_combo_colors()
+            self._score_events = [
+                compute_live_scores(r, self.beatmap) for r in self.replays
+            ]
 
             if self.beatmap.hit_objects:
                 first_t = self.beatmap.hit_objects[0].time
@@ -211,10 +205,11 @@ class Renderer:
             else:
                 self.playback_origin = -2000.0
 
-            self.current_time = self.playback_origin
-            self.last_ticks   = pygame.time.get_ticks()
-            self.paused       = False
-            self.state        = "PLAYING"
+            self.current_time  = self.playback_origin
+            self.last_ticks    = pygame.time.get_ticks()
+            self.paused        = False
+            self.state         = "PLAYING"
+            self._next_hit_idx = 0
 
             self._init_audio()
 
@@ -227,12 +222,18 @@ class Renderer:
 
     def _build_combo_colors(self) -> None:
         assert self.beatmap
-        self.combo_colors = []
-        idx = -1
+        self.combo_colors  = []
+        self.combo_numbers = []
+        color_idx  = -1
+        combo_num  = 0
         for obj in self.beatmap.hit_objects:
-            if obj.is_new_combo or idx == -1:
-                idx = (idx + 1) % len(config.COMBO_COLORS)
-            self.combo_colors.append(config.COMBO_COLORS[idx])
+            if obj.is_new_combo or color_idx == -1:
+                color_idx = (color_idx + 1) % len(config.COMBO_COLORS)
+                combo_num = 1
+            else:
+                combo_num += 1
+            self.combo_colors.append(config.COMBO_COLORS[color_idx])
+            self.combo_numbers.append(combo_num)
 
     # ------------------------------------------------------------------
     # Audio
@@ -272,6 +273,23 @@ class Renderer:
             pygame.mixer.music.stop()
         self._audio_started = False
 
+    def _load_hit_sound(self) -> None:
+        path = os.path.join(_PROJECT_ROOT, "osu-hit-sound.mp3")
+        if not os.path.isfile(path):
+            return
+        try:
+            self._hit_sound = pygame.mixer.Sound(path)
+            self._hit_sound.set_volume(1.0)
+        except Exception as e:
+            self._hit_sound = None
+            self.error_msg  = f"Hit sound error: {e}"
+
+    def _num_font(self, size: int) -> pygame.font.Font:
+        size = max(6, size)
+        if size not in self._font_cache:
+            self._font_cache[size] = pygame.font.SysFont("Arial", size, bold=True)
+        return self._font_cache[size]
+
     # ------------------------------------------------------------------
     # Controls
     # ------------------------------------------------------------------
@@ -297,15 +315,19 @@ class Renderer:
         if self.state != "PLAYING":
             return
         self._audio_stop()
-        self.current_time = self.playback_origin
-        self.last_ticks   = pygame.time.get_ticks()
-        self.paused       = False
+        self.current_time  = self.playback_origin
+        self.last_ticks    = pygame.time.get_ticks()
+        self.paused        = False
+        self._next_hit_idx = 0
 
     def seek(self, delta_ms: float) -> None:
         if self.state != "PLAYING":
             return
         self.current_time += delta_ms
         self.last_ticks    = pygame.time.get_ticks()
+        if self.beatmap:
+            times = [obj.time for obj in self.beatmap.hit_objects]
+            self._next_hit_idx = bisect.bisect_right(times, self.current_time)
         if self._audio_path:
             if self.current_time >= 0:
                 self._audio_play_from(self.current_time)
@@ -327,6 +349,16 @@ class Renderer:
         if self._audio_path and not self._audio_started and self.current_time >= 0:
             self._audio_play_from(self.current_time)
 
+        # Fire hit sound for each note whose time the playhead just passed
+        if self._hit_sound and self.beatmap:
+            objs = self.beatmap.hit_objects
+            while self._next_hit_idx < len(objs):
+                if objs[self._next_hit_idx].time <= self.current_time:
+                    self._hit_sound.play()
+                    self._next_hit_idx += 1
+                else:
+                    break
+
     # ------------------------------------------------------------------
     # Draw entry point
     # ------------------------------------------------------------------
@@ -342,42 +374,92 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _draw_waiting(self) -> None:
-        self.screen.fill(config.BG_COLOR)
-        W, H = self.screen.get_size()
+        surf = self.screen
+        surf.fill(config.BG_COLOR)
+        W, H = surf.get_size()
+        CX   = W // 2
 
-        skin_loaded = self._cursor_img is not None
-        lines = [
-            ("osu! Replay Viewer",                          self.font_lg, (255, 220, 80)),
-            ("",                                             self.font_md, config.TEXT_COLOR),
-            (f"Replays loaded : {len(self.osr_paths)} / 2", self.font_md, config.TEXT_COLOR),
-            (f"Beatmap loaded : {'Yes' if (self.osu_path or self._candidate_osu_paths) else 'No'}",
-             self.font_md, config.TEXT_COLOR),
-            (f"Skin loaded    : {'Yes' if skin_loaded else 'No'}",
-             self.font_md, config.TEXT_COLOR),
-            ("",                                             self.font_md, config.TEXT_COLOR),
-            ("Drag & drop anywhere on the window:",          self.font_md, (180, 220, 255)),
-            ("  • 2 replay files   (.osr)",                  self.font_sm, config.TEXT_COLOR),
-            ("  • 1 beatmap file   (.osu  or  .osz)",        self.font_sm, config.TEXT_COLOR),
-            ("  • 1 skin  (optional)  (.osk)",               self.font_sm, config.TEXT_COLOR),
-            ("",                                             self.font_sm, config.TEXT_COLOR),
-            ("Controls :",                                   self.font_md, (180, 220, 255)),
-            ("  SPACE       pause / resume",                 self.font_sm, config.TEXT_COLOR),
-            ("  R           restart",                        self.font_sm, config.TEXT_COLOR),
-            ("  TAB         toggle overlay / side-by-side",  self.font_sm, config.TEXT_COLOR),
-            ("  ← →         seek  ±5 s",                    self.font_sm, config.TEXT_COLOR),
-            ("  ESC         quit",                           self.font_sm, config.TEXT_COLOR),
-        ]
+        # ── Title ─────────────────────────────────────────────────────────────
+        t_osu = self.font_xl.render("osu!", True, config.PINK)
+        t_sub = self.font_lg.render("REPLAY  VIEWER", True, config.TEXT_COLOR)
+        title_h = t_osu.get_height() + 6 + t_sub.get_height()
+        ty = H // 2 - title_h // 2 - 110
+        surf.blit(t_osu, (CX - t_osu.get_width() // 2, ty))
+        surf.blit(t_sub, (CX - t_sub.get_width() // 2, ty + t_osu.get_height() + 6))
 
-        y = H // 8
-        for text, font, color in lines:
-            if text:
-                surf = font.render(text, True, color)
-                self.screen.blit(surf, (W // 2 - surf.get_width() // 2, y))
-            y += font.size("A")[1] + 6
+        # ── Status card ───────────────────────────────────────────────────────
+        sy      = ty + title_h + 36
+        card_w  = 320
+        card_h  = 74
+        cx      = CX - card_w // 2
+        _rounded_box(surf, (cx, sy, card_w, card_h), (255, 255, 255, 14), radius=12)
 
+        # Replay row
+        rl = self.font_sm.render("REPLAYS", True, config.TEXT_DIM)
+        surf.blit(rl, (cx + 20, sy + 14))
+        for i in range(2):
+            dot_col = config.PLAYER_COLORS[i] if i < len(self.osr_paths) else (50, 50, 68)
+            dx = cx + 20 + rl.get_width() + 16 + i * 22
+            dy = sy + 20
+            pygame.draw.circle(surf, dot_col, (dx, dy), 7)
+            if i < len(self.osr_paths):
+                pygame.draw.circle(surf, (255, 255, 255), (dx, dy), 7, 1)
+
+        count_s = self.font_sm.render(f"{len(self.osr_paths)} / 2", True, config.TEXT_DIM)
+        surf.blit(count_s, (cx + card_w - count_s.get_width() - 20, sy + 14))
+
+        # Beatmap row
+        bm_ok  = bool(self.osu_path or self._candidate_osu_paths)
+        bl     = self.font_sm.render("BEATMAP", True, config.TEXT_DIM)
+        bstate = self.font_sm.render("loaded" if bm_ok else "not loaded",
+                                     True, config.PINK if bm_ok else config.TEXT_DIM)
+        surf.blit(bl,     (cx + 20, sy + 46))
+        surf.blit(bstate, (cx + card_w - bstate.get_width() - 20, sy + 46))
+        dot_col = config.PINK if bm_ok else (50, 50, 68)
+        pygame.draw.circle(surf, dot_col,
+                           (cx + 20 + bl.get_width() + 12, sy + 52), 5)
+
+        # ── Drop hint ─────────────────────────────────────────────────────────
+        iy = sy + card_h + 28
+        dh = self.font_md.render("Drop files anywhere to load", True, config.TEXT_COLOR)
+        surf.blit(dh, (CX - dh.get_width() // 2, iy))
+        iy += dh.get_height() + 12
+
+        for label, hint in (
+            (".osr", "×2  —  replay files"),
+            (".osu  /  .osz", "×1  —  beatmap"),
+        ):
+            ls = self.font_sm.render(label, True, config.PINK)
+            rs = self.font_sm.render(hint,  True, config.TEXT_DIM)
+            lx = CX - (ls.get_width() + 12 + rs.get_width()) // 2
+            surf.blit(ls, (lx, iy))
+            surf.blit(rs, (lx + ls.get_width() + 12, iy))
+            iy += ls.get_height() + 7
+
+        # ── Divider ───────────────────────────────────────────────────────────
+        iy += 14
+        pygame.draw.line(surf, (45, 44, 62), (CX - 130, iy), (CX + 130, iy))
+        iy += 14
+
+        # ── Controls ──────────────────────────────────────────────────────────
+        for key, action in (
+            ("SPACE", "pause / resume"),
+            ("R",     "restart"),
+            ("TAB",   "overlay  ↔  side-by-side"),
+            ("← →",   "seek  ±5 s"),
+            ("ESC",   "quit"),
+        ):
+            ks  = self.font_sm.render(key,    True, config.PINK)
+            acts = self.font_sm.render(action, True, config.TEXT_DIM)
+            kx  = CX - 90
+            surf.blit(ks,   (kx, iy))
+            surf.blit(acts, (kx + 72, iy))
+            iy += ks.get_height() + 5
+
+        # ── Error ─────────────────────────────────────────────────────────────
         if self.error_msg:
-            s = self.font_md.render(self.error_msg, True, (255, 80, 80))
-            self.screen.blit(s, (W // 2 - s.get_width() // 2, H - 60))
+            es = self.font_sm.render(self.error_msg, True, (255, 75, 90))
+            surf.blit(es, (CX - es.get_width() // 2, H - 38))
 
     # ------------------------------------------------------------------
     # Playing screen
@@ -386,17 +468,17 @@ class Renderer:
     def _draw_playing(self) -> None:
         self.screen.fill(config.BG_COLOR)
         W, H = self.screen.get_size()
-        UI_TOP    = 48
-        UI_BOTTOM = 24
+        UI_TOP    = 72
+        UI_BOTTOM = 28
 
         if self.mode == "OVERLAY":
             field = (0, UI_TOP, W, H - UI_TOP - UI_BOTTOM)
             self._draw_field(self.screen, field, [0, 1])
         else:
             mid    = W // 2
-            field1 = (0,       UI_TOP, mid - 2, H - UI_TOP - UI_BOTTOM)
-            field2 = (mid + 2, UI_TOP, mid - 2, H - UI_TOP - UI_BOTTOM)
-            pygame.draw.line(self.screen, (70, 70, 90), (mid, 0), (mid, H), 2)
+            field1 = (0,       UI_TOP, mid - 1, H - UI_TOP - UI_BOTTOM)
+            field2 = (mid + 1, UI_TOP, mid - 1, H - UI_TOP - UI_BOTTOM)
+            pygame.draw.line(self.screen, (40, 39, 56), (mid, UI_TOP), (mid, H - UI_BOTTOM), 2)
             self._draw_field(self.screen, field1, [0])
             self._draw_field(self.screen, field2, [1])
 
@@ -486,6 +568,7 @@ class Renderer:
         alpha = self._object_alpha(dt, pre)
 
         self._draw_circle_shape(surf, pos, r, color, alpha)
+        self._draw_combo_number(surf, pos, r, idx, alpha)
 
         if dt > 0:
             ar = int(r * (1.0 + 3.0 * dt / pre))
@@ -501,6 +584,18 @@ class Renderer:
         pygame.draw.circle(tmp, (*color, alpha),        c, r)
         pygame.draw.circle(tmp, (255, 255, 255, alpha), c, r, 2)
         surf.blit(tmp, (pos[0] - r - 2, pos[1] - r - 2))
+
+    def _draw_combo_number(
+        self, surf: pygame.Surface, pos: Tuple[int, int],
+        r: int, idx: int, alpha: int,
+    ) -> None:
+        if idx >= len(self.combo_numbers):
+            return
+        num  = self.combo_numbers[idx]
+        font = self._num_font(max(8, int(r * 0.75)))
+        ns   = font.render(str(num), True, (255, 255, 255))
+        ns.set_alpha(alpha)
+        surf.blit(ns, (pos[0] - ns.get_width() // 2, pos[1] - ns.get_height() // 2))
 
     def _draw_approach_circle(
         self, surf: pygame.Surface, pos: Tuple[int, int],
@@ -543,6 +638,7 @@ class Renderer:
 
         head_pos = self._to_screen(obj.x, obj.y, rect)
         self._draw_circle_shape(surf, head_pos, r, color, alpha)
+        self._draw_combo_number(surf, head_pos, r, idx, alpha)
 
         if dt > 0:
             ar = int(r * (1.0 + 3.0 * dt / pre))
@@ -601,60 +697,9 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _draw_cursor(self, surf: pygame.Surface, rect: Rect, player: int) -> None:
-        replay = self.replays[player]
-        color  = config.PLAYER_COLORS[player]
-        ct     = self.current_time
-
-        if self._cursor_img is not None:
-            self._draw_skin_cursor(surf, rect, replay, color, ct)
-        else:
-            self._draw_default_cursor(surf, rect, replay, color, ct)
-
-    # ---- skinned cursor ----
-
-    def _draw_skin_cursor(
-        self,
-        surf: pygame.Surface,
-        rect: Rect,
-        replay: Replay,
-        color: Tuple[int, int, int],
-        ct: float,
-    ) -> None:
-        trail_img  = self._cursor_trail or self._cursor_img
-        cursor_img = self._cursor_img
-        trail_len  = config.CURSOR_TRAIL_LEN
-
-        # Trail
-        if trail_img is not None:
-            tw, th = trail_img.get_size()
-            for k in range(1, trail_len + 1):
-                t_past = ct - k * 14
-                px, py = cursor_at(replay.frames, t_past)
-                sp     = self._to_screen(px, py, rect)
-                alpha  = int(220 * (trail_len - k) / trail_len)
-                if alpha <= 0:
-                    continue
-                tmp = trail_img.copy()
-                tmp.set_alpha(alpha)
-                surf.blit(tmp, (sp[0] - tw // 2, sp[1] - th // 2))
-
-        # Main cursor — tinted with player color so the two are distinguishable
-        if cursor_img is not None:
-            px, py = cursor_at(replay.frames, ct)
-            sp = self._to_screen(px, py, rect)
-            cw, ch = cursor_img.get_size()
-
-            tinted = cursor_img.copy()
-            # BLEND_RGBA_MULT multiplies existing pixel colors by the fill color.
-            # White (255,255,255) cursors become the player color; colored cursors
-            # get a tint shift.  Alpha channel is preserved.
-            tinted.fill((*color, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            surf.blit(tinted, (sp[0] - cw // 2, sp[1] - ch // 2))
-
-            # Optional center dot on top
-            if self._cursor_middle is not None:
-                mw, mh = self._cursor_middle.get_size()
-                surf.blit(self._cursor_middle, (sp[0] - mw // 2, sp[1] - mh // 2))
+        self._draw_default_cursor(
+            surf, rect, self.replays[player], config.PLAYER_COLORS[player], self.current_time
+        )
 
     # ---- default cursor ----
 
@@ -667,20 +712,32 @@ class Renderer:
         ct: float,
     ) -> None:
         trail = config.CURSOR_TRAIL_LEN
+        cr    = config.CURSOR_RADIUS
 
+        # Trail — tapers in size and fades to background colour
         for k in range(trail, 0, -1):
-            t_past = ct - k * 14
+            t_past = ct - k * 11
             px, py = cursor_at(replay.frames, t_past)
             sp     = self._to_screen(px, py, rect)
-            factor = k / trail
-            c      = _tinted(color, factor * 0.75)
-            sr     = max(1, int(config.CURSOR_RADIUS * factor * 0.65))
+            frac   = k / trail
+            # Quadratic fade so the head end stays bright
+            bright = frac ** 1.6
+            c      = _tinted(color, bright * 0.55)
+            sr     = max(1, int(cr * frac * 0.52))
             pygame.draw.circle(surf, c, sp, sr)
 
+        # Cursor head
         px, py = cursor_at(replay.frames, ct)
         sp = self._to_screen(px, py, rect)
-        pygame.draw.circle(surf, color,           sp, config.CURSOR_RADIUS)
-        pygame.draw.circle(surf, (255, 255, 255), sp, config.CURSOR_RADIUS, 2)
+
+        # Soft outer glow (dim ring slightly larger than cursor)
+        pygame.draw.circle(surf, _tinted(color, 0.35), sp, cr + 4, 3)
+        # Filled body
+        pygame.draw.circle(surf, color, sp, cr)
+        # Crisp white outline ring
+        pygame.draw.circle(surf, (255, 255, 255), sp, cr, 2)
+        # Centre dot
+        pygame.draw.circle(surf, (255, 255, 255), sp, 3)
 
     # ------------------------------------------------------------------
     # HUD
@@ -691,48 +748,94 @@ class Renderer:
         W, H = surf.get_size()
         ct   = self.current_time
 
-        if self.replays:
-            s = self.font_md.render(self.replays[0].player_name, True, config.PLAYER_COLORS[0])
-            surf.blit(s, (10, 10))
-        if len(self.replays) >= 2:
-            s = self.font_md.render(self.replays[1].player_name, True, config.PLAYER_COLORS[1])
-            surf.blit(s, (W - s.get_width() - 10, 10))
+        # ── Top bar ───────────────────────────────────────────────────────────
+        _rounded_box(surf, (0, 0, W, 72), (8, 7, 14, 210), radius=0)
+        pygame.draw.line(surf, (40, 39, 56), (0, 72), (W, 72))
 
-        t_s       = ct / 1000.0
-        sign, t_s = ("-", abs(t_s)) if t_s < 0 else ("", t_s)
-        clock_str = f"{sign}{int(t_s // 60):02d}:{t_s % 60:05.2f}"
-        cs = self.font_md.render(clock_str, True, config.TEXT_COLOR)
-        surf.blit(cs, (W // 2 - cs.get_width() // 2, 12))
+        # ── Player 1 – left ───────────────────────────────────────────────────
+        if self.replays:
+            ev0   = self._score_events[0] if self._score_events else []
+            live0 = score_at(ev0, ct)
+            cmb0  = combo_at(ev0, ct)
+            col0  = config.PLAYER_COLORS[0]
+
+            ns = self.font_md.render(self.replays[0].player_name.upper(), True, col0)
+            pill_w = ns.get_width() + 20
+            _rounded_box(surf, (10, 9, pill_w, 20), (*col0, 38), radius=10)
+            surf.blit(ns, (20, 11))
+
+            sc = self.font_score.render(f"{live0:,}", True, col0)
+            surf.blit(sc, (10, 32))
+
+            cx = self.font_sm.render(f"{cmb0}x", True, _tinted(col0, 0.7))
+            surf.blit(cx, (10 + sc.get_width() + 8, 32 + sc.get_height() - cx.get_height()))
+
+        # ── Player 2 – right ──────────────────────────────────────────────────
+        if len(self.replays) >= 2:
+            ev1   = self._score_events[1] if len(self._score_events) >= 2 else []
+            live1 = score_at(ev1, ct)
+            cmb1  = combo_at(ev1, ct)
+            col1  = config.PLAYER_COLORS[1]
+
+            ns = self.font_md.render(self.replays[1].player_name.upper(), True, col1)
+            pill_w = ns.get_width() + 20
+            _rounded_box(surf, (W - pill_w - 10, 9, pill_w, 20), (*col1, 38), radius=10)
+            surf.blit(ns, (W - ns.get_width() - 20, 11))
+
+            sc = self.font_score.render(f"{live1:,}", True, col1)
+            surf.blit(sc, (W - sc.get_width() - 10, 32))
+
+            cx = self.font_sm.render(f"{cmb1}x", True, _tinted(col1, 0.7))
+            surf.blit(cx, (W - sc.get_width() - 10 - cx.get_width() - 8,
+                           32 + sc.get_height() - cx.get_height()))
+
+        # ── Clock – center ────────────────────────────────────────────────────
+        t_s = abs(ct / 1000.0)
+        clock_str = f"{'-' if ct < 0 else ''}{int(t_s // 60):02d}:{t_s % 60:05.2f}"
+        cs = self.font_time.render(clock_str, True, config.TEXT_COLOR)
+        surf.blit(cs, (W // 2 - cs.get_width() // 2, 14))
 
         if self.paused:
-            ps = self.font_lg.render("PAUSED", True, (255, 210, 0))
-            surf.blit(ps, (W // 2 - ps.get_width() // 2, 36))
+            ps = self.font_lg.render("PAUSED", True, config.YELLOW)
+            surf.blit(ps, (W // 2 - ps.get_width() // 2, 38))
 
-        mode_lbl = "OVERLAY" if self.mode == "OVERLAY" else "SIDE BY SIDE"
-        ms = self.font_sm.render(f"[TAB] {mode_lbl}", True, (120, 120, 140))
-        surf.blit(ms, (W - ms.get_width() - 8, H - 20))
-
-        if self.beatmap:
-            info = f"{self.beatmap.artist} – {self.beatmap.title}  [{self.beatmap.version}]"
-            bs = self.font_sm.render(info, True, (150, 150, 170))
-            surf.blit(bs, (8, H - 20))
-
+        # ── Bottom bar ────────────────────────────────────────────────────────
         self._draw_progress(surf, W, H)
 
         if self.error_msg:
-            es = self.font_sm.render(self.error_msg, True, (255, 100, 100))
-            surf.blit(es, (W // 2 - es.get_width() // 2, H - 38))
+            es = self.font_sm.render(self.error_msg, True, (255, 75, 90))
+            surf.blit(es, (W // 2 - es.get_width() // 2, H - 42))
 
     def _draw_progress(self, surf: pygame.Surface, W: int, H: int) -> None:
+        # Bottom strip background
+        _rounded_box(surf, (0, H - 28, W, 28), (8, 7, 14, 210), radius=0)
+        pygame.draw.line(surf, (40, 39, 56), (0, H - 28), (W, H - 28))
+
+        # Beatmap info – left
+        if self.beatmap:
+            info = (f"{self.beatmap.artist}  —  "
+                    f"{self.beatmap.title}  [{self.beatmap.version}]")
+            bs = self.font_xs.render(info, True, config.TEXT_DIM)
+            surf.blit(bs, (10, H - 19))
+
+        # Mode label – right
+        mode_lbl = "OVERLAY" if self.mode == "OVERLAY" else "SIDE BY SIDE"
+        ms = self.font_xs.render(f"TAB  {mode_lbl}", True, config.TEXT_DIM)
+        surf.blit(ms, (W - ms.get_width() - 10, H - 19))
+
+        # Progress bar – 3 px line at very bottom
         if not self.beatmap or not self.beatmap.hit_objects:
             return
-        bm    = self.beatmap
         start = self.playback_origin
-        end   = bm.hit_objects[-1].time + 2000
+        end   = self.beatmap.hit_objects[-1].time + 2000
         total = end - start
         if total <= 0:
             return
         prog = max(0.0, min(1.0, (self.current_time - start) / total))
-        bx, by, bw, bh = 8, H - 10, W - 16, 4
-        pygame.draw.rect(surf, (50, 50, 70),    (bx, by, bw, bh))
-        pygame.draw.rect(surf, (160, 160, 220), (bx, by, int(bw * prog), bh))
+        bx, by, bw, bh = 0, H - 3, W, 3
+        pygame.draw.rect(surf, (38, 37, 54), (bx, by, bw, bh))
+        fw = int(bw * prog)
+        if fw > 0:
+            pygame.draw.rect(surf, config.PINK, (bx, by, fw, bh))
+        # Dot at playhead
+        pygame.draw.circle(surf, (255, 255, 255), (bx + fw, by + 1), 5)

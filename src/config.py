@@ -1,29 +1,41 @@
 OSU_WIDTH  = 512
 OSU_HEIGHT = 384
 
+# ── Background ────────────────────────────────────────────────────────────────
+BG_COLOR     = (15, 14, 22)
+PLAYFIELD_BG = (22, 21, 33)
+
+# ── Brand / accent ────────────────────────────────────────────────────────────
+PINK   = (255, 102, 170)   # osu! lazer pink
+YELLOW = (255, 212,  68)   # paused / highlight
+
+# ── Text ──────────────────────────────────────────────────────────────────────
+TEXT_COLOR = (210, 210, 228)
+TEXT_DIM   = (110, 110, 145)
+
+# ── Player colours ────────────────────────────────────────────────────────────
 PLAYER_COLORS = [
-    (255,  80,  80),   # Player 1 — red
-    ( 80, 160, 255),   # Player 2 — blue
+    (255, 102, 170),   # P1 – osu! pink
+    (100, 174, 255),   # P2 – sky blue
 ]
 
+# ── Hit-object combo colours ──────────────────────────────────────────────────
 COMBO_COLORS = [
-    (255, 165,   0),
-    (  0, 202,   0),
-    (  0, 130, 255),
-    (255,   0,   0),
-    (200,   0, 200),
-    (255, 255,   0),
+    (255, 160,  55),
+    ( 60, 210,  90),
+    ( 60, 148, 255),
+    (255,  60,  90),
+    (175,  60, 218),
+    (255, 218,  50),
 ]
 
-CURSOR_TRAIL_LEN = 30
-CURSOR_RADIUS    = 16
+# ── Cursor ────────────────────────────────────────────────────────────────────
+CURSOR_TRAIL_LEN = 28
+CURSOR_RADIUS    = 13
 
-BG_COLOR       = ( 18,  18,  28)
-PLAYFIELD_BG   = ( 28,  28,  42)
-TEXT_COLOR     = (220, 220, 220)
+# ── Slider ────────────────────────────────────────────────────────────────────
+SLIDER_BODY  = (50, 50, 72)
 
-SLIDER_BORDER  = (255, 255, 255)
-SLIDER_BODY    = ( 80,  80,  80)
-
-FADE_IN_MS   = 400   # approach circle / circle fade-in duration
-HIT_LINGER   = 200   # ms a circle stays after its hit time before disappearing
+# ── Timing ────────────────────────────────────────────────────────────────────
+FADE_IN_MS  = 400
+HIT_LINGER  = 200

@@ -21,6 +21,7 @@ class Replay:
     beatmap_md5: str
     player_name: str
     mods:        int
+    score:       int
     frames:      List[ReplayFrame]
 
 
@@ -47,6 +48,7 @@ def load_replay(path: str) -> Replay:
         beatmap_md5 = osr.beatmap_hash or "",
         player_name = osr.username or "Player",
         mods        = int(osr.mods),
+        score       = int(osr.score),
         frames      = frames,
     )
 
