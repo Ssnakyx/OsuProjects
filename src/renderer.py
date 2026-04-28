@@ -104,8 +104,11 @@ class Renderer:
         # Audio
         self._audio_path:    Optional[str]               = None
         self._audio_started: bool                         = False
-        self._hit_sound:    Optional[pygame.mixer.Sound] = None
-        self._next_hit_idx: int                          = 0
+        self._hit_sound:       Optional[pygame.mixer.Sound] = None
+        self._hit_sound_times: List[float]                 = []
+        self._hit_snd_idx:     int                         = 0
+        self._music_volume:    float                       = 0.7
+        self._sfx_volume:      float                       = 1.0
 
         # Live score timeline — one entry per loaded replay
         self._score_events: List[List] = []
@@ -199,17 +202,24 @@ class Renderer:
                 compute_live_scores(r, self.beatmap) for r in self.replays
             ]
 
+            # Build hit-sound timeline from P1's actual key-press times.
+            # Only include events where combo > 0 (i.e. real hits, not misses).
+            self._hit_sound_times = sorted(
+                ev[0] for ev in self._score_events[0]
+                if ev[0] > float('-inf') and ev[2] > 0
+            ) if self._score_events else []
+            self._hit_snd_idx = 0
+
             if self.beatmap.hit_objects:
                 first_t = self.beatmap.hit_objects[0].time
                 self.playback_origin = first_t - self.beatmap.preempt - 1500
             else:
                 self.playback_origin = -2000.0
 
-            self.current_time  = self.playback_origin
-            self.last_ticks    = pygame.time.get_ticks()
-            self.paused        = False
-            self.state         = "PLAYING"
-            self._next_hit_idx = 0
+            self.current_time = self.playback_origin
+            self.last_ticks   = pygame.time.get_ticks()
+            self.paused       = False
+            self.state        = "PLAYING"
 
             self._init_audio()
 
@@ -263,6 +273,7 @@ class Renderer:
             return
         pos = max(0.0, game_ms / 1000.0)
         try:
+            pygame.mixer.music.set_volume(self._music_volume)
             pygame.mixer.music.play(loops=0, start=pos)
             self._audio_started = True
         except Exception as exc:
@@ -273,13 +284,22 @@ class Renderer:
             pygame.mixer.music.stop()
         self._audio_started = False
 
+    def adjust_music_vol(self, delta: float) -> None:
+        self._music_volume = max(0.0, min(1.0, self._music_volume + delta))
+        pygame.mixer.music.set_volume(self._music_volume)
+
+    def adjust_sfx_vol(self, delta: float) -> None:
+        self._sfx_volume = max(0.0, min(1.0, self._sfx_volume + delta))
+        if self._hit_sound:
+            self._hit_sound.set_volume(self._sfx_volume)
+
     def _load_hit_sound(self) -> None:
         path = os.path.join(_PROJECT_ROOT, "osu-hit-sound.mp3")
         if not os.path.isfile(path):
             return
         try:
             self._hit_sound = pygame.mixer.Sound(path)
-            self._hit_sound.set_volume(1.0)
+            self._hit_sound.set_volume(self._sfx_volume)
         except Exception as e:
             self._hit_sound = None
             self.error_msg  = f"Hit sound error: {e}"
@@ -318,16 +338,14 @@ class Renderer:
         self.current_time  = self.playback_origin
         self.last_ticks    = pygame.time.get_ticks()
         self.paused        = False
-        self._next_hit_idx = 0
+        self._hit_snd_idx  = 0
 
     def seek(self, delta_ms: float) -> None:
         if self.state != "PLAYING":
             return
         self.current_time += delta_ms
         self.last_ticks    = pygame.time.get_ticks()
-        if self.beatmap:
-            times = [obj.time for obj in self.beatmap.hit_objects]
-            self._next_hit_idx = bisect.bisect_right(times, self.current_time)
+        self._hit_snd_idx  = bisect.bisect_right(self._hit_sound_times, self.current_time)
         if self._audio_path:
             if self.current_time >= 0:
                 self._audio_play_from(self.current_time)
@@ -349,13 +367,12 @@ class Renderer:
         if self._audio_path and not self._audio_started and self.current_time >= 0:
             self._audio_play_from(self.current_time)
 
-        # Fire hit sound for each note whose time the playhead just passed
-        if self._hit_sound and self.beatmap:
-            objs = self.beatmap.hit_objects
-            while self._next_hit_idx < len(objs):
-                if objs[self._next_hit_idx].time <= self.current_time:
+        # Fire hit sound at the player's actual key-press times (from replay data)
+        if self._hit_sound:
+            while self._hit_snd_idx < len(self._hit_sound_times):
+                if self._hit_sound_times[self._hit_snd_idx] <= self.current_time:
                     self._hit_sound.play()
-                    self._next_hit_idx += 1
+                    self._hit_snd_idx += 1
                 else:
                     break
 
@@ -447,6 +464,8 @@ class Renderer:
             ("R",     "restart"),
             ("TAB",   "overlay  ↔  side-by-side"),
             ("← →",   "seek  ±5 s"),
+            ("[ ]",   "music volume  ±10 %"),
+            (", .",   "SFX volume  ±10 %"),
             ("ESC",   "quit"),
         ):
             ks  = self.font_sm.render(key,    True, config.PINK)
@@ -806,22 +825,48 @@ class Renderer:
             es = self.font_sm.render(self.error_msg, True, (255, 75, 90))
             surf.blit(es, (W // 2 - es.get_width() // 2, H - 42))
 
+    def _draw_vol_bar(
+        self, surf: pygame.Surface,
+        x: int, y: int, vol: float,
+        label: str, color: Tuple[int, int, int],
+    ) -> None:
+        lbl = self.font_xs.render(label, True, config.TEXT_DIM)
+        surf.blit(lbl, (x, y - lbl.get_height() // 2))
+        bx = x + lbl.get_width() + 6
+        bw, bh = 54, 3
+        by = y - bh // 2
+        pygame.draw.rect(surf, (38, 37, 54), (bx, by, bw, bh), border_radius=2)
+        fw = int(bw * vol)
+        if fw > 0:
+            pygame.draw.rect(surf, color, (bx, by, fw, bh), border_radius=2)
+        pct = self.font_xs.render(f"{int(vol * 100)}%", True, color)
+        surf.blit(pct, (bx + bw + 5, y - pct.get_height() // 2))
+
     def _draw_progress(self, surf: pygame.Surface, W: int, H: int) -> None:
         # Bottom strip background
         _rounded_box(surf, (0, H - 28, W, 28), (8, 7, 14, 210), radius=0)
         pygame.draw.line(surf, (40, 39, 56), (0, H - 28), (W, H - 28))
+
+        mid_y = H - 14   # vertical centre of the strip
 
         # Beatmap info – left
         if self.beatmap:
             info = (f"{self.beatmap.artist}  —  "
                     f"{self.beatmap.title}  [{self.beatmap.version}]")
             bs = self.font_xs.render(info, True, config.TEXT_DIM)
-            surf.blit(bs, (10, H - 19))
+            surf.blit(bs, (10, mid_y - bs.get_height() // 2))
+
+        # Volume bars – centre
+        CX = W // 2
+        self._draw_vol_bar(surf, CX - 145, mid_y, self._music_volume,
+                           "♫", config.PINK)
+        self._draw_vol_bar(surf, CX + 10,  mid_y, self._sfx_volume,
+                           "SFX", (100, 174, 255))
 
         # Mode label – right
         mode_lbl = "OVERLAY" if self.mode == "OVERLAY" else "SIDE BY SIDE"
         ms = self.font_xs.render(f"TAB  {mode_lbl}", True, config.TEXT_DIM)
-        surf.blit(ms, (W - ms.get_width() - 10, H - 19))
+        surf.blit(ms, (W - ms.get_width() - 10, mid_y - ms.get_height() // 2))
 
         # Progress bar – 3 px line at very bottom
         if not self.beatmap or not self.beatmap.hit_objects:
@@ -837,5 +882,4 @@ class Renderer:
         fw = int(bw * prog)
         if fw > 0:
             pygame.draw.rect(surf, config.PINK, (bx, by, fw, bh))
-        # Dot at playhead
         pygame.draw.circle(surf, (255, 255, 255), (bx + fw, by + 1), 5)

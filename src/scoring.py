@@ -61,6 +61,9 @@ def compute_live_scores(replay, beatmap) -> List[Tuple[float, int, int]]:
             events.append((t_hit, score, combo))
         else:
             combo = 0
+            # Emit a miss marker at the end of the hit window so combo_at()
+            # returns 0 from this point onward until the next hit.
+            events.append((t0 + win50, score, 0))
 
     return events
 

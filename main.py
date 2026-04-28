@@ -35,6 +35,14 @@ def main() -> None:
                     renderer.seek(-5000)
                 elif event.key == pygame.K_RIGHT:
                     renderer.seek(5000)
+                elif event.key == pygame.K_LEFTBRACKET:
+                    renderer.adjust_music_vol(-0.1)
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    renderer.adjust_music_vol(+0.1)
+                elif event.key == pygame.K_COMMA:
+                    renderer.adjust_sfx_vol(-0.1)
+                elif event.key == pygame.K_PERIOD:
+                    renderer.adjust_sfx_vol(+0.1)
 
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
