@@ -119,7 +119,7 @@ OsuProject/
     ├── replay.py        .osr file parser via osrparse
     └── scoring.py       Real-time hit detection, score & combo simulation
 ```
-testtetststzefz
+
 ---
 
 ## How the scoring works
