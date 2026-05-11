@@ -143,7 +143,7 @@ The result is a timeline of `(time_ms, cumulative_score, current_combo)` events.
 Make sure `pygame >= 2.1.0` is installed. The hit sound requires `osu-hit-sound.mp3` in the project root. Check the error message shown in the HUD if something goes wrong.
 
 **Wrong difficulty loaded from .osz**  
-The viewer matches the replay's beatmap MD5 against the files in the archive. If it cannot find a match it falls back to the first `.osu` file and shows a warning in the HUD.
+The viewer matches the replay's beatmap MD5 against the files in the archive. If it cannot find a match it falls back to the first `.osu` file and shows a warning in the HUD..
 
 **Replay loads but cursors look wrong**  
 Verify that both `.osr` files are for the same beatmap. A warning is shown in the HUD if the MD5 hashes differ.
