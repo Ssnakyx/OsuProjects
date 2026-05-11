@@ -128,7 +128,7 @@ OsuProject/
 
 1. Extracts every new key press (M1 / M2 / K1 / K2) from the replay frames.
 2. For each hit object, finds the closest key press within the OD-based hit window (±win300 / win100 / win50 ms) while the cursor is within `1.5 × circle_radius`.
-3. Assigns 300 / 100 / 50 based on timing accuracy and accumulates score with the standard combo multiplier.
+3. Assigns 300 / 100 / 50 based on ttiming accuracy and accumulates score with the standard combo multiplier.
 4. Emits a **miss event** (combo = 0) when no key press is found in the hit window.
 
 The result is a timeline of `(time_ms, cumulative_score, current_combo)` events. The HUD does a binary search into this list every frame to display the current values.
