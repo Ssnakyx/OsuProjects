@@ -4,7 +4,7 @@ A side-by-side replay comparison tool for **osu! standard** built with Python an
 Load two `.osr` replay files alongside a beatmap and watch both cursors play simultaneously — with live score, combo, hit sounds, and a clean osu! lazer-inspired UI.
 
 
----
+--- lol
 
 ## Features
 
