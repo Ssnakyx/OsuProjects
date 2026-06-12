@@ -25,6 +25,9 @@ class Replay:
     frames:      List[ReplayFrame]
 
 
+_HR = 1 << 4   # Hard Rock mod bit
+
+
 def load_replay(path: str) -> Replay:
     if osrparse is None:
         raise ImportError("osrparse is not installed. Run: pip install osrparse")
@@ -34,6 +37,10 @@ def load_replay(path: str) -> Replay:
     if osr.replay_data is None:
         raise ValueError("Replay contains no cursor data.")
 
+    # HR flips the playfield vertically for that player. Flip the cursor back
+    # so every replay aligns with the *unflipped* beatmap we render.
+    flip_y = bool(int(osr.mods) & _HR)
+
     frames: List[ReplayFrame] = []
     t = 0.0
     for ev in osr.replay_data:
@@ -42,7 +49,8 @@ def load_replay(path: str) -> Replay:
         t += ev.time_delta
         if t < 0:
             continue
-        frames.append(ReplayFrame(t, float(ev.x), float(ev.y), int(ev.keys)))
+        y = 384.0 - float(ev.y) if flip_y else float(ev.y)
+        frames.append(ReplayFrame(t, float(ev.x), y, int(ev.keys)))
 
     return Replay(
         beatmap_md5 = osr.beatmap_hash or "",
@@ -75,3 +83,17 @@ def cursor_at(frames: List[ReplayFrame], time: float) -> Tuple[float, float]:
         return (f0.x, f0.y)
     s = (time - f0.time) / (f1.time - f0.time)
     return (f0.x + (f1.x - f0.x) * s, f0.y + (f1.y - f0.y) * s)
+
+
+def keys_at(frames: List[ReplayFrame], time: float) -> int:
+    """Key bitmask of the latest frame at or before *time* (0 if none)."""
+    if not frames or time < frames[0].time:
+        return 0
+    lo, hi = 0, len(frames) - 1
+    while lo < hi:
+        mid = (lo + hi + 1) >> 1
+        if frames[mid].time <= time:
+            lo = mid
+        else:
+            hi = mid - 1
+    return frames[lo].keys

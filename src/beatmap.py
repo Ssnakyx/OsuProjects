@@ -58,7 +58,10 @@ class Beatmap:
     title:          str = ""
     artist:         str = ""
     version:        str = ""
+    creator:        str = ""
     audio_filename: str = ""   # from [General] AudioFilename
+    background:     str = ""   # from [Events] — image filename, may be empty
+    beatmapset_id:  int = 0
 
     hp:    float = 5.0
     cs:    float = 5.0
@@ -90,6 +93,23 @@ class Beatmap:
     @property
     def circle_radius(self) -> float:
         return 54.4 - 4.48 * self.cs
+
+
+def build_combo_info(bm: "Beatmap", palette_size: int) -> Tuple[List[int], List[int]]:
+    """Per-object (colour_index, combo_number) following new-combo flags."""
+    color_idx: List[int] = []
+    combo_num: List[int] = []
+    ci = -1
+    n = 0
+    for obj in bm.hit_objects:
+        if obj.is_new_combo or ci == -1:
+            ci = (ci + 1) % palette_size
+            n = 1
+        else:
+            n += 1
+        color_idx.append(ci)
+        combo_num.append(n)
+    return color_idx, combo_num
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +158,19 @@ def load_beatmap(path: str) -> Beatmap:
             if   line.startswith('Title:'):   bm.title   = line[6:].strip()
             elif line.startswith('Artist:'):  bm.artist  = line[7:].strip()
             elif line.startswith('Version:'): bm.version = line[8:].strip()
+            elif line.startswith('Creator:'): bm.creator = line[8:].strip()
+            elif line.startswith('BeatmapSetID:'):
+                try:
+                    bm.beatmapset_id = int(line[13:].strip())
+                except ValueError:
+                    pass
+
+        elif section == 'Events':
+            # Background line: 0,0,"bg.jpg",0,0
+            if not bm.background and line.startswith('0,0,'):
+                parts = line.split(',')
+                if len(parts) >= 3:
+                    bm.background = parts[2].strip().strip('"')
 
         elif section == 'Difficulty':
             if ':' not in line:

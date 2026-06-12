@@ -1,155 +1,139 @@
 # osu! Replay Viewer
 
-A side-by-side replay comparison tool for **osu! standard** built with Python and pygame.  
-Load two `.osr` replay files alongside a beatmap and watch both cursors play simultaneously — with live score, combo, hit sounds, and a clean osu! lazer-inspired UI.
+Watch and compare **osu! standard** replays — in your **browser** or in a native **desktop** window.
 
-
---- lol
-
-## Features
-
-- **Dual replay playback** — overlay both cursors on the same field, or split the screen side-by-side
-- **Live score & combo** — simulated in real time using osu!-stable hit windows (300 / 100 / 50 / miss)
-- **Combo numbers on hit circles** — each note shows its combo number, fades with the approach circle
-- **Hit sounds** — plays `osu-hit-sound.mp3` in sync with the player's actual key presses
-- **Background music** — audio from the beatmap's `.osz` or `.osu` folder plays automatically
-- **Volume controls** — adjust music and SFX volume independently with keyboard shortcuts
-- **Seek & pause** — jump anywhere in the replay, restart instantly
-- **osu! lazer UI** — dark theme, pink accent colour, rounded panels, smooth cursor trail
+Drop one or two `.osr` files and press play: **the beatmap is downloaded automatically** from public osu! mirrors (osu.direct / catboy.best), with live score, accuracy, combo, hit judgments, hit-error bar, key overlay and synced music.
 
 ---
 
-## Requirements
+## 🚀 Quick start (easiest)
 
-| Requirement | Version |
-|-------------|---------|
-| Python | 3.9 or newer |
-| pygame | 2.1.0 or newer |
-| osrparse | 6.0.0 or newer |
+### macOS — double-click
 
----
+| File | What it does |
+|------|--------------|
+| **`start.command`** | Opens the **web version** in your browser (recommended) |
+| **`start-desktop.command`** | Opens the **desktop** (pygame) window |
 
-## Installation
+> First run may take a minute — it creates a Python environment and installs the two dependencies automatically.
+> If macOS blocks the file: right-click → **Open** → **Open**.
 
-### 1 — Clone the repository
-
-```bash
-git clone https://github.com/Ssnakyx/OsuProjects.git
-cd OsuProject
-```
-
-### 2 — Create a virtual environment (recommended)
+### Any OS — terminal
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate      # macOS / Linux
-.venv\Scripts\activate         # Windows
-```
-
-### 3 — Install dependencies
-
-```bash
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-### 4 — Add a hit sound (optional)
-
-Place an MP3 file named **`osu-hit-sound.mp3`** in the project root (next to `main.py`).  
-Any short percussion sound works. If the file is absent the viewer runs silently.
-
-```
-OsuProject/
-├── main.py
-├── osu-hit-sound.mp3   ← put it here
-├── requirements.txt
-└── src/
-```
-
-### 5 — Run
-
-```bash
-python3 main.py
+python main.py --web             # browser version  (http://127.0.0.1:7270)
+python main.py                   # desktop version
 ```
 
 ---
 
-## How to use
+## ✨ Features
 
-### Loading files
-
-Drag and drop files **anywhere** onto the window:
-
-| File | Description |
-|------|-------------|
-| `.osr` × 2 | The two replay files to compare |
-| `.osu` or `.osz` | The beatmap (difficulty file or full map archive) |
-
-Drop them in any order. Playback starts automatically once both replays and the beatmap are loaded.
-
-> **Tip:** If you drag in an `.osz` archive the viewer will extract it automatically and match the correct difficulty using the replay's beatmap MD5 hash.
+- **Just drop replays** — the beatmap (`.osz`) is found by MD5 and downloaded automatically, then cached in `~/.osu-replay-viewer/maps`
+- **1 or 2 replays** — watch a single play, or compare two cursors **overlaid** or **side-by-side**
+- **Skin support** — drop a `.osk` in the project folder and it's used automatically: cursor, hit circles, approach circles, follow circle, combo & slider colours from `skin.ini`
+- **Start button** — files load first, playback starts when *you* click ▶
+- **Live scoring** — score, combo, accuracy and 100/50/miss counts simulated with osu!-stable hit windows
+- **Hit judgments** — 100 / 50 / ✕ popups on the playfield
+- **Hit-error bar** — UR-style timing ticks (P1 above, P2 below)
+- **Key overlay** — K1/K2/M1/M2 lit from the actual replay inputs
+- **Mod support** — HR (flipped + adjusted CS/AR/OD), EZ, DT/NC, HT; mod badges in the HUD
+- **Playback speed** — 0.5× → 2× (the web version keeps the music in sync at any speed!)
+- **Music & hit sounds** — beatmap audio with volume sliders, hit sounds from real key presses
+- **Background image**, skip intro button, click-to-seek progress bar, fullscreen (web), help overlay
 
 ---
 
-## Controls
+## 🌐 Web vs 🖥 desktop
+
+| | Web (`--web`) | Desktop |
+|---|---|---|
+| Runs in | Chrome / Firefox / Edge (local server) | pygame window |
+| Music at 0.5×–2× speed | ✅ pitch-corrected | ❌ muted when speed ≠ 1× |
+| DT/HT replays | plays at true speed with audio | visual 1× (slow-mo, audio synced) |
+| Fullscreen | ✅ | window resize |
+| Extra install | nothing | nothing |
+
+Everything (parsing, slider curves, scoring, downloads) runs locally in Python — the browser is only the display. Nothing is uploaded anywhere.
+
+---
+
+## 🎮 Controls
 
 | Key | Action |
 |-----|--------|
 | `SPACE` | Pause / resume |
-| `R` | Restart from the beginning |
-| `TAB` | Toggle **Overlay** ↔ **Side-by-side** view |
-| `← →` | Seek backward / forward 5 seconds |
-| `[` `]` | Music volume − / + 10 % |
-| `,` `.` | SFX (hit sound) volume − / + 10 % |
-| `ESC` | Quit |
+| `R` | Restart |
+| `S` | Skip intro |
+| `TAB` | Overlay ↔ side-by-side (2 replays) |
+| `←` `→` | Seek ± 5 s |
+| `-` `+` | Playback speed |
+| `[` `]` | Music volume (desktop) |
+| `,` `.` | Hit-sound volume (desktop) |
+| `O` | Browse files (desktop) |
+| `C` | Close files / back to menu (desktop) |
+| `F` | Fullscreen (web) |
+| `H` | Help overlay |
+| `ESC` | Quit / back |
+
+Mouse: drag the progress bar to seek, drag the volume sliders, click the speed / view buttons.
 
 ---
 
-## Project structure
+## 📂 Loading files
+
+Drag & drop anywhere (or use the buttons / `O` key):
+
+| File | Needed? |
+|------|---------|
+| `.osr` replay | **1 required**, 2nd optional for comparison |
+| `.osu` / `.osz` beatmap | optional — **auto-downloaded** if missing |
+
+If the auto-download can't find the map (unranked / very old maps), drop the `.osz` manually.
+
+---
+
+## 🗂 Project structure
 
 ```
-OsuProject/
-├── main.py              Entry point — pygame event loop
-├── requirements.txt
-├── osu-hit-sound.mp3    Hit sound (user-supplied, optional)
-└── src/
-    ├── beatmap.py       .osu file parser (circles, sliders, spinners, timing)
-    ├── config.py        Colour palette, player colours, game constants
-    ├── curves.py        Bézier / catmull-rom slider path computation
-    ├── renderer.py      All drawing logic and game state (HUD, playfield, cursor)
-    ├── replay.py        .osr file parser via osrparse
-    └── scoring.py       Real-time hit detection, score & combo simulation
+OsuProjects/
+├── main.py               Entry point — desktop loop or --web server
+├── start.command         macOS double-click launcher (web)
+├── start-desktop.command macOS double-click launcher (desktop)
+├── osu-hit-sound.mp3     Hit sound (optional)
+├── *.osk                 Your skin (optional — first one found is used)
+├── src/
+│   ├── beatmap.py        .osu parser (objects, timing, metadata, background)
+│   ├── curves.py         Bézier / Catmull / arc slider paths
+│   ├── replay.py         .osr parser (osrparse), HR cursor flip
+│   ├── scoring.py        Hit detection → score/combo/acc/judgment timeline
+│   ├── mods.py           Mod bitmask helpers (HR/EZ/DT/HT windows & stats)
+│   ├── mirror.py         Beatmap auto-download (osu.direct, catboy, nerinyan)
+│   ├── skin.py           .osk skin loader (cursor, circles, colours)
+│   ├── config.py         Colours & constants
+│   └── renderer.py       Desktop UI (pygame)
+└── web/
+    ├── server.py         Local HTTP server + JSON API (stdlib only)
+    └── static/           Browser app (canvas renderer)
 ```
 
 ---
 
-## How the scoring works
+## 🔧 Troubleshooting
 
-`scoring.py` simulates osu! hit detection against the replay data:
+**`command not found: pip`** — use the launchers (`start.command`) or `python3 -m pip …` inside the venv.
 
-1. Extracts every new key press (M1 / M2 / K1 / K2) from the replay frames.
-2. For each hit object, finds the closest key press within the OD-based hit window (±win300 / win100 / win50 ms) while the cursor is within `1.5 × circle_radius`.
-3. Assigns 300 / 100 / 50 based on ttiming accuracy and accumulates score with the standard combo multiplier.
-4. Emits a **miss event** (combo = 0) when no key press is found in the hit window.
+**Map not found online** — only maps that exist on public mirrors can be auto-downloaded; drop the `.osz` yourself otherwise.
 
-The result is a timeline of `(time_ms, cumulative_score, current_combo)` events. The HUD does a binary search into this list every frame to display the current values.
+**No music in the browser** — click once anywhere (browsers block autoplay), and prefer Chrome/Firefox; Safari can't play `.ogg` audio.
 
-> This is an approximation — it does not replicate osu!'s note-lock, slider tick scoring, or spinner mechanics exactly, but it is close enough for visual comparison.
+**Replays look misaligned** — make sure both replays are for the same difficulty; a warning is shown if their MD5 differ.
 
----
-
-## Troubleshooting
-
-**No audio / hit sounds not playing**  
-Make sure `pygame >= 2.1.0` is installed. The hit sound requires `osu-hit-sound.mp3` in the project root. Check the error message shown in the HUD if something goes wrong.
-
-**Wrong difficulty loaded from .osz**  
-The viewer matches the replay's beatmap MD5 against the files in the archive. If it cannot find a match it falls back to the first `.osu` file and shows a warning in the HUD..
-
-**Replay loads but cursors look wrong**  
-Verify that both `.osr` files are for the same beatmap. A warning is shown in the HUD if the MD5 hashes differ.
-
-**`ModuleNotFoundError: No module named 'osrparse'`**  
-Run `pip install -r requirements.txt` inside your virtual environment.
+**Scoring isn't exact** — it's a close approximation (no note-lock, slider ticks, or spinner scoring).
 
 ---
 

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>osu! Replay Viewer</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23ff66aa'/><circle cx='50' cy='50' r='34' fill='none' stroke='white' stroke-width='6'/></svg>">
+</head>
+<body>
+
+<!-- ════════ LANDING ════════ -->
+<div id="landing">
+  <header class="brand">
+    <div class="logo">osu!</div>
+    <div class="brand-sub">REPLAY&nbsp;&nbsp;VIEWER</div>
+  </header>
+
+  <div id="dropzone">
+    <div class="dz-icon">⤓</div>
+    <div class="dz-title">Drop your <b>.osr</b> replays here</div>
+    <div class="dz-sub">1 replay to watch &nbsp;·&nbsp; 2 replays to compare</div>
+    <div class="dz-auto">the beatmap is downloaded automatically</div>
+    <div class="dz-buttons">
+      <button id="btn-replays" class="btn btn-pink">Choose replays…</button>
+      <button id="btn-map" class="btn btn-ghost">Choose beatmap (.osz / .osu)</button>
+    </div>
+  </div>
+
+  <div id="chips">
+    <div class="chip" id="chip-r0"><span class="dot d0"></span><span class="chip-label">REPLAY 1</span><span class="chip-value">waiting for file…</span></div>
+    <div class="chip" id="chip-r1"><span class="dot d1"></span><span class="chip-label">REPLAY 2</span><span class="chip-value">optional</span></div>
+    <div class="chip" id="chip-map"><span class="dot dm"></span><span class="chip-label">BEATMAP</span><span class="chip-value">auto-download after replay</span></div>
+  </div>
+
+  <button id="btn-watch" class="btn btn-pink btn-watch hidden">▶&nbsp;&nbsp;Watch replay</button>
+
+  <div class="landing-foot">
+    <button id="btn-clear" class="btn btn-mini">reset</button>
+    <span>maps are fetched from osu.direct / catboy.best mirrors · works best in Chrome or Firefox</span>
+  </div>
+
+  <input type="file" id="file-replays" accept=".osr" multiple hidden>
+  <input type="file" id="file-map" accept=".osu,.osz" hidden>
+</div>
+
+<!-- ════════ PLAYER ════════ -->
+<div id="player" class="hidden">
+  <div id="bg-layer"></div>
+
+  <header id="hud-top">
+    <div class="panel left" id="panel-0">
+      <div class="p-row1"><span class="p-name pill0" id="p0-name">—</span><span class="p-mods" id="p0-mods"></span></div>
+      <div class="p-score c0" id="p0-score">0</div>
+      <div class="p-row3"><span class="p-acc" id="p0-acc">100.00%</span><span class="p-combo c0" id="p0-combo">0x</span><span class="p-counts" id="p0-counts"></span></div>
+    </div>
+
+    <div class="center-info">
+      <div id="map-title">—</div>
+      <div id="clock">00:00.00</div>
+      <div id="state-line"></div>
+    </div>
+
+    <div class="panel right hidden" id="panel-1">
+      <div class="p-row1"><span class="p-mods" id="p1-mods"></span><span class="p-name pill1" id="p1-name">—</span></div>
+      <div class="p-score c1" id="p1-score">0</div>
+      <div class="p-row3"><span class="p-counts" id="p1-counts"></span><span class="p-combo c1" id="p1-combo">0x</span><span class="p-acc" id="p1-acc">100.00%</span></div>
+    </div>
+  </header>
+
+  <canvas id="field"></canvas>
+
+  <button id="btn-skip" class="btn btn-pink hidden">SKIP&nbsp;»</button>
+
+  <footer id="hud-bottom">
+    <button class="ctl" id="btn-play" title="space">⏸</button>
+    <button class="ctl" id="btn-restart" title="R">↺</button>
+    <span id="time-label">00:00 / 00:00</span>
+    <input type="range" id="seek" min="0" max="1000" value="0" step="1">
+    <select id="speed" title="playback speed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.25">1.25×</option>
+      <option value="1.5">1.5×</option>
+      <option value="2">2×</option>
+    </select>
+    <span class="vol-group">♫<input type="range" id="vol-music" min="0" max="100" value="70"></span>
+    <span class="vol-group">SFX<input type="range" id="vol-sfx" min="0" max="100" value="80"></span>
+    <button class="ctl wide" id="btn-mode" title="tab">SPLIT</button>
+    <button class="ctl" id="btn-files" title="load other files">＋</button>
+    <button class="ctl" id="btn-full" title="F">⛶</button>
+    <button class="ctl" id="btn-help" title="H">?</button>
+  </footer>
+</div>
+
+<!-- ════════ HELP ════════ -->
+<div id="help-modal" class="hidden">
+  <div class="help-card">
+    <h2>Shortcuts</h2>
+    <table>
+      <tr><td>SPACE</td><td>pause / resume</td></tr>
+      <tr><td>R</td><td>restart</td></tr>
+      <tr><td>S</td><td>skip intro</td></tr>
+      <tr><td>TAB</td><td>overlay ↔ side-by-side</td></tr>
+      <tr><td>← →</td><td>seek ± 5 s</td></tr>
+      <tr><td>- / +</td><td>playback speed</td></tr>
+      <tr><td>F</td><td>fullscreen</td></tr>
+      <tr><td>H</td><td>this help</td></tr>
+    </table>
+    <div class="help-close">click anywhere to close</div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

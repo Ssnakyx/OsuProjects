@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+tests/fixtures/
+
+# Skins are picked up automatically but too big for the repo —
+# put your .osk in the project root locally.
+*.osk
