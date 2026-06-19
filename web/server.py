@@ -15,6 +15,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse
 import webbrowser
 import zipfile
@@ -182,12 +183,16 @@ def _map_json() -> dict:
     media = _media_paths()
     md5 = _md5_of(S.beatmap_path) if S.beatmap_path else ""
     target = S.replays[0].beatmap_md5 if S.replays[0] else None
+    # Cache-bust the media URLs per map: they are served with a long
+    # max-age, and the path is constant, so without a unique token the
+    # browser would replay the *previous* map's cached audio/background.
+    v = md5 or str(int(time.time()))
     return {
         "title": bm.title, "artist": bm.artist, "version": bm.version,
         "creator": bm.creator, "setId": bm.beatmapset_id,
         "cs": bm.cs, "ar": bm.ar, "od": bm.od,
-        "audio": "/api/media/audio" if media["audio"] else None,
-        "bg": "/api/media/bg" if media["bg"] else None,
+        "audio": (f"/api/media/audio?v={v}" if media["audio"] else None),
+        "bg": (f"/api/media/bg?v={v}" if media["bg"] else None),
         "diffCount": len(S.candidates),
         "md5Match": (target is None or md5 == target),
         "objects": objs,
