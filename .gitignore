@@ -7,3 +7,6 @@ tests/fixtures/
 # Skins are picked up automatically but too big for the repo —
 # put your .osk in the project root locally.
 *.osk
+
+# Local debug screenshots / scratch images
+image.png

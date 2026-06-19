@@ -211,6 +211,10 @@ export function goLanding() {
 
 export async function clearSession() {
   try { await fetch("/api/clear", { method: "POST" }); } catch (e) {}
+  // Stop the previous map's song right away — otherwise it keeps playing
+  // while the next map downloads, until enterPlayer() replaces it.
+  if (S.audio) { S.audio.pause(); S.audio = null; }
+  S.playing = false;
   S.replays = [null, null]; S.replayBytes = [null, null]; S.events = [null, null]; S.map = null;
   $("btn-watch").classList.add("disabled");
   chip("chip-r0", "waiting for file…");
