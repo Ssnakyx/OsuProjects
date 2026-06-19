@@ -88,11 +88,19 @@ def main() -> None:
                         help="port for --web mode (default 7270)")
     parser.add_argument("--no-browser", action="store_true",
                         help="don't open the browser automatically in --web mode")
+    parser.add_argument("--lan", action="store_true",
+                        help="make --web mode reachable from other devices "
+                             "on the same network (binds to all interfaces)")
+    parser.add_argument("--host", default=None,
+                        help="host/interface to bind in --web mode "
+                             "(default 127.0.0.1; --lan implies 0.0.0.0)")
     args = parser.parse_args()
 
     if args.web:
         from web.server import run_server
-        run_server(port=args.port, open_browser=not args.no_browser)
+        host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
+        run_server(port=args.port, open_browser=not args.no_browser,
+                   host=host)
     else:
         run_desktop()
 

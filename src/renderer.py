@@ -206,7 +206,21 @@ class Renderer:
             except Exception as exc:
                 self.error_msg = f"Replay error: {exc}"
                 return
-            if len(self.replays) < 2:
+            if path in self.osr_paths:
+                self.replays[self.osr_paths.index(path)] = rp
+            elif self.replays and rp.beatmap_md5 != self.replays[0].beatmap_md5:
+                # Replay of a *different* beatmap → start a fresh session
+                # (keep a just-dropped map if it matches the new replay).
+                keep_cands  = self._candidate_osu_paths
+                keep_tmpdir = self._tmpdir
+                self.reset()
+                if keep_cands and any(self._md5(p) == rp.beatmap_md5
+                                      for p in keep_cands):
+                    self._candidate_osu_paths = keep_cands
+                    self._tmpdir = keep_tmpdir
+                self.replays   = [rp]
+                self.osr_paths = [path]
+            elif len(self.replays) < 2:
                 self.replays.append(rp)
                 self.osr_paths.append(path)
             else:
@@ -267,8 +281,9 @@ class Renderer:
                 self.error_msg = "No .osu file found inside the .osz archive."
                 return
             self._candidate_osu_paths = osu_paths
-            if len(osu_paths) == 1:
-                self.osu_path = osu_paths[0]
+            # Forget the previous map so this archive's difficulties are
+            # resolved (by replay MD5) instead of keeping the old .osu.
+            self.osu_path = osu_paths[0] if len(osu_paths) == 1 else None
         except zipfile.BadZipFile:
             self.error_msg = "Could not open .osz — file may be corrupted."
 

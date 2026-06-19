@@ -46,6 +46,16 @@ python main.py                   # desktop version
 - **Music & hit sounds** — beatmap audio with volume sliders, hit sounds from real key presses
 - **Background image**, skip intro button, click-to-seek progress bar, fullscreen (web), help overlay
 
+### ✨ New in the web viewer
+
+- **Settings panel** (⚙) — accent themes, background dim/blur, cursor size & trail length, and toggles for the key overlay, hit-error bar, judgments, 300s, approach circles, combo numbers, snaking sliders and more. Everything is saved in your browser.
+- **Live stats** (`D`) — unstable rate (UR), full 300/100/50/✕ counts, a hit-error **distribution histogram**, and a rough pp estimate per player.
+- **Recent replays** — your last plays are kept locally (IndexedDB) and can be re-watched in one click.
+- **Frame stepping** — pause and step one replay frame at a time with `,` / `.`.
+- **Animated UI** — neon / glassmorphism theme with an animated background, plus a responsive layout that works on touch devices.
+
+> The pp figure is a rough heuristic for comparison only — it is **not** official osu! pp (that needs the full star-rating algorithm).
+
 ---
 
 ## 🌐 Web vs 🖥 desktop

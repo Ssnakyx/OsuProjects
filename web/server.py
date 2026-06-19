@@ -485,16 +485,34 @@ class Handler(BaseHTTPRequestHandler):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def run_server(port: int = 7270, open_browser: bool = True) -> None:
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}"
+def _lan_ip() -> str:
+    """Best-effort guess of this machine's LAN IP address."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't actually send anything; just picks the outbound interface.
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def run_server(port: int = 7270, open_browser: bool = True,
+               host: str = "127.0.0.1") -> None:
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    local_url = f"http://127.0.0.1:{port}"
     print()
     print("  osu! Replay Viewer — web mode")
-    print(f"  Open  {url}  in your browser")
+    print(f"  Open  {local_url}  in your browser")
+    if host not in ("127.0.0.1", "localhost"):
+        lan_url = f"http://{_lan_ip()}:{port}"
+        print(f"  From another device on this Wi-Fi:  {lan_url}")
     print("  Press Ctrl+C to stop.")
     print()
     if open_browser:
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.6, lambda: webbrowser.open(local_url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

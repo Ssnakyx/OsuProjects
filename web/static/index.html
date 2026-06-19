@@ -2,42 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c0b14">
 <title>osu! Replay Viewer</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23ff66aa'/><circle cx='50' cy='50' r='34' fill='none' stroke='white' stroke-width='6'/></svg>">
 </head>
 <body>
 
+<!-- animated background (landing) -->
+<canvas id="particles"></canvas>
+<div id="aurora"><span></span><span></span><span></span></div>
+
+<!-- global settings gear (top-right, always visible) -->
+<button id="btn-gear" class="icon-btn" title="Settings">⚙</button>
+
 <!-- ════════ LANDING ════════ -->
 <div id="landing">
   <header class="brand">
-    <div class="logo">osu!</div>
+    <div class="logo-wrap">
+      <div class="logo">osu!</div>
+      <div class="logo-ring"></div>
+    </div>
     <div class="brand-sub">REPLAY&nbsp;&nbsp;VIEWER</div>
   </header>
 
-  <div id="dropzone">
+  <div id="dropzone" class="glass">
     <div class="dz-icon">⤓</div>
     <div class="dz-title">Drop your <b>.osr</b> replays here</div>
     <div class="dz-sub">1 replay to watch &nbsp;·&nbsp; 2 replays to compare</div>
-    <div class="dz-auto">the beatmap is downloaded automatically</div>
+    <div class="dz-auto">✦ the beatmap downloads automatically ✦</div>
     <div class="dz-buttons">
       <button id="btn-replays" class="btn btn-pink">Choose replays…</button>
-      <button id="btn-map" class="btn btn-ghost">Choose beatmap (.osz / .osu)</button>
+      <button id="btn-map" class="btn btn-ghost">Beatmap (.osz / .osu)</button>
     </div>
   </div>
 
   <div id="chips">
-    <div class="chip" id="chip-r0"><span class="dot d0"></span><span class="chip-label">REPLAY 1</span><span class="chip-value">waiting for file…</span></div>
-    <div class="chip" id="chip-r1"><span class="dot d1"></span><span class="chip-label">REPLAY 2</span><span class="chip-value">optional</span></div>
-    <div class="chip" id="chip-map"><span class="dot dm"></span><span class="chip-label">BEATMAP</span><span class="chip-value">auto-download after replay</span></div>
+    <div class="chip" id="chip-r0">
+      <span class="dot d0"></span><span class="chip-label">REPLAY 1</span>
+      <span class="chip-value">waiting for file…</span>
+      <span class="chip-spin"></span>
+    </div>
+    <div class="chip" id="chip-r1">
+      <span class="dot d1"></span><span class="chip-label">REPLAY 2</span>
+      <span class="chip-value">optional</span>
+      <span class="chip-spin"></span>
+    </div>
+    <div class="chip" id="chip-map">
+      <span class="dot dm"></span><span class="chip-label">BEATMAP</span>
+      <span class="chip-value">auto-download after replay</span>
+      <span class="chip-spin"></span>
+      <div class="chip-bar"><i></i></div>
+    </div>
   </div>
 
-  <button id="btn-watch" class="btn btn-pink btn-watch hidden">▶&nbsp;&nbsp;Watch replay</button>
+  <button id="btn-watch" class="btn btn-pink btn-watch disabled">▶&nbsp;&nbsp;Start replay</button>
+
+  <section id="recent" class="hidden">
+    <div class="recent-head"><span>RECENT REPLAYS</span><button id="btn-recent-clear" class="btn btn-mini">clear</button></div>
+    <div id="recent-list"></div>
+  </section>
 
   <div class="landing-foot">
-    <button id="btn-clear" class="btn btn-mini">reset</button>
-    <span>maps are fetched from osu.direct / catboy.best mirrors · works best in Chrome or Firefox</span>
+    <button id="btn-clear" class="btn btn-mini">reset session</button>
+    <button id="btn-patch" class="btn btn-mini">✦ what's new</button>
+    <span>maps from osu.direct / catboy.best · best in Chrome / Firefox</span>
   </div>
 
   <input type="file" id="file-replays" accept=".osr" multiple hidden>
@@ -47,12 +77,14 @@
 <!-- ════════ PLAYER ════════ -->
 <div id="player" class="hidden">
   <div id="bg-layer"></div>
+  <div id="bg-tint"></div>
 
   <header id="hud-top">
     <div class="panel left" id="panel-0">
       <div class="p-row1"><span class="p-name pill0" id="p0-name">—</span><span class="p-mods" id="p0-mods"></span></div>
       <div class="p-score c0" id="p0-score">0</div>
-      <div class="p-row3"><span class="p-acc" id="p0-acc">100.00%</span><span class="p-combo c0" id="p0-combo">0x</span><span class="p-counts" id="p0-counts"></span></div>
+      <div class="p-row3"><span class="p-acc" id="p0-acc">100.00%</span><span class="p-combo c0" id="p0-combo">0x</span></div>
+      <div class="p-row4"><span class="p-counts" id="p0-counts"></span><span class="p-ur" id="p0-ur"></span><span class="p-pp" id="p0-pp"></span></div>
     </div>
 
     <div class="center-info">
@@ -64,7 +96,8 @@
     <div class="panel right hidden" id="panel-1">
       <div class="p-row1"><span class="p-mods" id="p1-mods"></span><span class="p-name pill1" id="p1-name">—</span></div>
       <div class="p-score c1" id="p1-score">0</div>
-      <div class="p-row3"><span class="p-counts" id="p1-counts"></span><span class="p-combo c1" id="p1-combo">0x</span><span class="p-acc" id="p1-acc">100.00%</span></div>
+      <div class="p-row3"><span class="p-combo c1" id="p1-combo">0x</span><span class="p-acc" id="p1-acc">100.00%</span></div>
+      <div class="p-row4"><span class="p-pp" id="p1-pp"></span><span class="p-ur" id="p1-ur"></span><span class="p-counts" id="p1-counts"></span></div>
     </div>
   </header>
 
@@ -72,48 +105,158 @@
 
   <button id="btn-skip" class="btn btn-pink hidden">SKIP&nbsp;»</button>
 
+  <!-- live stats / hit distribution -->
+  <div id="stats-panel" class="glass hidden">
+    <div class="stats-head">HIT DISTRIBUTION<button id="stats-close" class="icon-btn small">✕</button></div>
+    <canvas id="hist"></canvas>
+    <div id="stats-rows"></div>
+  </div>
+
   <footer id="hud-bottom">
-    <button class="ctl" id="btn-play" title="space">⏸</button>
-    <button class="ctl" id="btn-restart" title="R">↺</button>
-    <span id="time-label">00:00 / 00:00</span>
-    <input type="range" id="seek" min="0" max="1000" value="0" step="1">
-    <select id="speed" title="playback speed">
-      <option value="0.5">0.5×</option>
-      <option value="0.75">0.75×</option>
-      <option value="1" selected>1×</option>
-      <option value="1.25">1.25×</option>
-      <option value="1.5">1.5×</option>
-      <option value="2">2×</option>
-    </select>
-    <span class="vol-group">♫<input type="range" id="vol-music" min="0" max="100" value="70"></span>
-    <span class="vol-group">SFX<input type="range" id="vol-sfx" min="0" max="100" value="80"></span>
-    <button class="ctl wide" id="btn-mode" title="tab">SPLIT</button>
-    <button class="ctl" id="btn-files" title="load other files">＋</button>
-    <button class="ctl" id="btn-full" title="F">⛶</button>
-    <button class="ctl" id="btn-help" title="H">?</button>
+    <div class="ctl-group">
+      <button class="ctl" id="btn-play" title="Space">⏸</button>
+      <button class="ctl" id="btn-restart" title="R">↺</button>
+      <button class="ctl" id="btn-step-b" title="Step back (,)">⏮</button>
+      <button class="ctl" id="btn-step-f" title="Step forward (.)">⏭</button>
+    </div>
+
+    <div class="ctl-seek">
+      <span id="time-label">00:00 / 00:00</span>
+      <input type="range" id="seek" min="0" max="1000" value="0" step="1">
+      <select id="speed" title="Playback speed">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="0.75">0.75×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </div>
+
+    <div class="ctl-group ctl-vol">
+      <span class="vol-group">♫<input type="range" id="vol-music" min="0" max="100" value="70"></span>
+      <span class="vol-group">SFX<input type="range" id="vol-sfx" min="0" max="100" value="80"></span>
+    </div>
+
+    <div class="ctl-group">
+      <button class="ctl wide" id="btn-mode" title="Tab">SPLIT</button>
+      <button class="ctl" id="btn-stats" title="Stats (D)">📊</button>
+      <button class="ctl" id="btn-set" title="Settings">⚙</button>
+      <button class="ctl" id="btn-files" title="Load other files">＋</button>
+      <button class="ctl" id="btn-full" title="F">⛶</button>
+      <button class="ctl" id="btn-help" title="H">?</button>
+    </div>
   </footer>
 </div>
 
-<!-- ════════ HELP ════════ -->
-<div id="help-modal" class="hidden">
-  <div class="help-card">
-    <h2>Shortcuts</h2>
-    <table>
-      <tr><td>SPACE</td><td>pause / resume</td></tr>
-      <tr><td>R</td><td>restart</td></tr>
-      <tr><td>S</td><td>skip intro</td></tr>
-      <tr><td>TAB</td><td>overlay ↔ side-by-side</td></tr>
-      <tr><td>← →</td><td>seek ± 5 s</td></tr>
-      <tr><td>- / +</td><td>playback speed</td></tr>
-      <tr><td>F</td><td>fullscreen</td></tr>
-      <tr><td>H</td><td>this help</td></tr>
-    </table>
-    <div class="help-close">click anywhere to close</div>
+<!-- ════════ SETTINGS ════════ -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-card glass" role="dialog">
+    <div class="modal-head">
+      <h2>Settings</h2>
+      <button id="settings-close" class="icon-btn small">✕</button>
+    </div>
+
+    <div class="set-section">Theme</div>
+    <div class="set-row">
+      <label>Accent colour</label>
+      <div class="swatches">
+        <button class="swatch" data-accent="pink"   style="--sw:#ff66aa"></button>
+        <button class="swatch" data-accent="blue"   style="--sw:#5b9dff"></button>
+        <button class="swatch" data-accent="green"  style="--sw:#54e08a"></button>
+        <button class="swatch" data-accent="purple" style="--sw:#b06bff"></button>
+        <button class="swatch" data-accent="orange" style="--sw:#ff9a3c"></button>
+        <button class="swatch" data-accent="red"    style="--sw:#ff5b6b"></button>
+      </div>
+    </div>
+
+    <div class="set-section">Visuals</div>
+    <div class="set-row"><label>Background dim</label><input type="range" data-opt="bgDim" min="0" max="100"><output></output></div>
+    <div class="set-row"><label>Background blur</label><input type="range" data-opt="bgBlur" min="0" max="20"><output></output></div>
+    <div class="set-row"><label>Cursor size</label><input type="range" data-opt="cursorScale" min="40" max="220"><output></output></div>
+    <div class="set-row"><label>Cursor trail</label><input type="range" data-opt="trail" min="0" max="200"><output></output></div>
+
+    <div class="set-section">Overlays</div>
+    <div class="set-grid">
+      <label class="switch"><input type="checkbox" data-opt="showKeys"><span></span>Key overlay</label>
+      <label class="switch"><input type="checkbox" data-opt="showErrorBar"><span></span>Hit-error bar</label>
+      <label class="switch"><input type="checkbox" data-opt="showJudgments"><span></span>Judgments</label>
+      <label class="switch"><input type="checkbox" data-opt="show300"><span></span>Show 300s</label>
+      <label class="switch"><input type="checkbox" data-opt="showApproach"><span></span>Approach circles</label>
+      <label class="switch"><input type="checkbox" data-opt="showBorder"><span></span>Playfield border</label>
+      <label class="switch"><input type="checkbox" data-opt="showNumbers"><span></span>Combo numbers</label>
+      <label class="switch"><input type="checkbox" data-opt="snaking"><span></span>Snaking sliders</label>
+    </div>
+
+    <div class="set-section">HUD</div>
+    <div class="set-grid">
+      <label class="switch"><input type="checkbox" data-opt="showUR"><span></span>Unstable rate</label>
+      <label class="switch"><input type="checkbox" data-opt="showPP"><span></span>pp estimate</label>
+      <label class="switch"><input type="checkbox" data-opt="showFps"><span></span>FPS counter</label>
+      <label class="switch"><input type="checkbox" data-opt="bgParticles"><span></span>Menu particles</label>
+    </div>
+
+    <div class="modal-foot">
+      <button id="settings-reset" class="btn btn-ghost">Reset to defaults</button>
+      <button id="settings-done" class="btn btn-pink">Done</button>
+    </div>
   </div>
 </div>
 
+<!-- ════════ HELP ════════ -->
+<div id="help-modal" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Shortcuts</h2><button id="help-close" class="icon-btn small">✕</button></div>
+    <table class="keys">
+      <tr><td>Space</td><td>pause / resume</td></tr>
+      <tr><td>R</td><td>restart</td></tr>
+      <tr><td>S</td><td>skip intro</td></tr>
+      <tr><td>Tab</td><td>overlay ↔ side-by-side</td></tr>
+      <tr><td>← →</td><td>seek ± 5 s</td></tr>
+      <tr><td>, .</td><td>step one frame (paused)</td></tr>
+      <tr><td>- / +</td><td>playback speed</td></tr>
+      <tr><td>D</td><td>stats / hit distribution</td></tr>
+      <tr><td>F</td><td>fullscreen</td></tr>
+      <tr><td>H</td><td>this help</td></tr>
+      <tr><td>Esc</td><td>back / close</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ════════ RESULTS ════════ -->
+<div id="results-modal" class="modal hidden">
+  <div class="modal-card glass results-card">
+    <div class="results-head">
+      <div class="results-eyebrow">Replay complete</div>
+      <div id="results-title">—</div>
+      <div id="results-sub"></div>
+    </div>
+    <div id="results-grid"></div>
+    <div class="modal-foot">
+      <button id="results-again" class="btn btn-ghost">↺&nbsp;&nbsp;Watch again</button>
+      <button id="results-menu" class="btn btn-pink">Back to menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ PATCH NOTES ════════ -->
+<div id="patch-modal" class="modal hidden">
+  <div class="modal-card glass patch-card">
+    <div class="modal-head">
+      <h2>What's new</h2>
+      <button id="patch-close" class="icon-btn small">✕</button>
+    </div>
+    <div id="patch-body"></div>
+    <div class="modal-foot">
+      <button id="patch-done" class="btn btn-pink">Got it</button>
+    </div>
+  </div>
+</div>
+
+<div id="fps" class="hidden">0 fps</div>
 <div id="toasts"></div>
 
-<script src="/static/app.js"></script>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>
