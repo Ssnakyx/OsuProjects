@@ -277,6 +277,10 @@ body.playing #btn-gear { display: none; }
   padding: 44px 24px 36px;
   overflow-y: auto;
 }
+/* Never let the taller cookie hero squeeze the other sections: keep their
+   natural height and scroll the page instead of shrinking (which would clip
+   the overflow:hidden dropzone on short screens). */
+#landing > * { flex-shrink: 0; }
 
 /* osu!lazer triangle field + warm pink wash behind the landing */
 #tri-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
@@ -290,7 +294,8 @@ body.playing #tri-bg, body.playing #landing-glow { display: none; }
 
 /* hero: spectrum ring around the pink osu! "cookie" */
 .hero {
-  --cookie: clamp(150px, 42vw, 208px);
+  /* bound by width AND height so short windows get a smaller cookie */
+  --cookie: clamp(132px, min(42vw, 30vh), 208px);
   position: relative;
   display: grid; place-items: center;
   width: calc(var(--cookie) * 2);
