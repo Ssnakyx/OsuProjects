@@ -39,6 +39,10 @@
   --p0:      var(--accent);
   --p1:      #66ccff;
 
+  /* ── osu!lazer triangle motif ── */
+  --tri:      rgba(255, 255, 255, .05);   /* triangles on the dark canvas */
+  --tri-pink: rgba(255, 255, 255, .14);   /* triangles inside the cookie  */
+
   /* ── osu! judgment colours ── */
   --judge-300: #66ccff;
   --judge-100: #54e08a;
@@ -268,43 +272,93 @@ body.playing #btn-gear { display: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 32px 24px;
+  justify-content: flex-start;
+  gap: 22px;
+  padding: 44px 24px 36px;
   overflow-y: auto;
 }
 
-.brand { text-align: center; }
-.logo-wrap { position: relative; display: inline-block; }
-.logo {
-  font-size: 70px;
-  font-weight: 800;
-  color: var(--accent);
-  text-shadow: 0 0 44px var(--accent-glow);
-  letter-spacing: -3px;
-  animation: float 5s ease-in-out infinite;
+/* osu!lazer triangle field + warm pink wash behind the landing */
+#tri-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+#landing-glow {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(255,102,170,.10), transparent 55%);
 }
-.logo-ring {
-  position: absolute; inset: -16px -20px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-  opacity: .22;
-  animation: pulse-ring 3s ease-out infinite;
-  pointer-events: none;
+body.playing #tri-bg, body.playing #landing-glow { display: none; }
+
+.brand { text-align: center; position: relative; z-index: 1; }
+
+/* hero: spectrum ring around the pink osu! "cookie" */
+.hero {
+  --cookie: clamp(150px, 42vw, 208px);
+  position: relative;
+  display: grid; place-items: center;
+  width: calc(var(--cookie) * 2);
+  height: calc(var(--cookie) * 2);
+  margin: -6px auto 0;
 }
+.visualizer { position: absolute; inset: 0; margin: auto; pointer-events: none; }
+
+.cookie {
+  position: relative; z-index: 1;
+  width: var(--cookie); height: var(--cookie);
+  border: 0; background: none; padding: 0; cursor: pointer;
+  transition: transform .12s var(--ease);
+}
+.cookie:active { transform: scale(.94); }
+.cookie-halo {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid var(--accent); opacity: .25;
+  animation: pulse-ring 2.2s ease-out infinite; pointer-events: none;
+}
+.cookie-disc {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 38% 30%, var(--accent), var(--accent-2) 78%);
+  box-shadow: 0 0 60px var(--accent-glow),
+              inset 0 -10px 40px rgba(0,0,0,.35),
+              inset 0 4px 18px rgba(255,255,255,.25);
+  border: 7px solid rgba(255,255,255,.92);
+  animation: beat 1.5s ease-in-out infinite;
+  transition: transform .22s var(--ease), box-shadow .22s;
+}
+.cookie:hover .cookie-disc {
+  animation-play-state: paused;
+  transform: scale(1.06);
+  box-shadow: 0 0 90px var(--accent-glow),
+              inset 0 -10px 40px rgba(0,0,0,.35),
+              inset 0 4px 18px rgba(255,255,255,.3);
+}
+.cookie-tri { position: absolute; inset: 0; pointer-events: none; }
+.cookie-label {
+  position: relative; z-index: 1;
+  color: #fff; font-weight: 800; line-height: 1;
+  font-size: calc(var(--cookie) * .34);
+  letter-spacing: -.04em;
+  text-shadow: 0 3px 14px rgba(0,0,0,.3);
+}
+
 @keyframes float { 50% { transform: translateY(-9px); } }
 @keyframes pulse-ring {
   0%   { transform: scale(.85); opacity: .5; }
   100% { transform: scale(1.28); opacity: 0; }
 }
+@keyframes beat {
+  0%,100% { transform: scale(1); }
+  8%      { transform: scale(1.045); }
+  30%     { transform: scale(1); }
+}
+
 .brand-sub {
-  margin-top: 10px;
+  margin-top: 16px;
   font-size: 13px; font-weight: 700;
   letter-spacing: 10px;
   color: var(--dim);
 }
 
 #dropzone {
+  position: relative;
+  overflow: hidden;
   width: min(560px, 92vw);
   border-radius: var(--r-lg);
   padding: 40px 28px 34px;
@@ -312,6 +366,8 @@ body.playing #btn-gear { display: none; }
   border: 1.5px dashed var(--stroke-2);
   transition: border-color .25s, background .25s, transform .18s var(--ease), box-shadow .25s;
 }
+.dz-tri { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .7; }
+.dz-inner { position: relative; z-index: 1; }
 #dropzone.drag {
   border-color: var(--accent);
   background: var(--accent-soft);

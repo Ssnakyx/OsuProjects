@@ -12,6 +12,7 @@ import {
 } from "./settings.js";
 import { openPatch, closePatch, closeResults } from "./screens.js";
 import { openDB, getRecent, renderRecent, clearRecent } from "./recent.js";
+import { startLandingFx, sizeLandingFx } from "./landing-fx.js";
 
 /* ── small view toggles ────────────────────────────────────────────── */
 
@@ -37,6 +38,9 @@ window.addEventListener("drop", e => {
 
 $("btn-replays").onclick = () => $("file-replays").click();
 $("btn-map").onclick = () => $("file-map").click();
+// The cookie logo: start if a replay is ready, otherwise open the file picker.
+$("osu-cookie").onclick = () =>
+  $("btn-watch").classList.contains("disabled") ? $("file-replays").click() : enterPlayer();
 $("file-replays").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
 $("file-map").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
 
@@ -101,7 +105,7 @@ document.addEventListener("click", () => {
   if (S.actx && S.actx.state === "suspended") S.actx.resume();
 });
 
-window.addEventListener("resize", () => { sizeParticles(); });
+window.addEventListener("resize", () => { sizeParticles(); sizeLandingFx(); });
 
 /* ── keyboard ──────────────────────────────────────────────────────── */
 
@@ -157,6 +161,7 @@ loadSkin();
 bindSettings();
 applySettings();
 if (OPT.bgParticles) startParticles();
+startLandingFx();
 openDB();
 getRecent().then(renderRecent);
 

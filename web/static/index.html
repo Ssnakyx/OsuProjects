@@ -13,6 +13,8 @@
 <!-- animated background (landing) -->
 <canvas id="particles"></canvas>
 <div id="aurora"><span></span><span></span><span></span></div>
+<canvas id="tri-bg" data-full aria-hidden="true"></canvas>
+<div id="landing-glow" aria-hidden="true"></div>
 
 <!-- global settings gear (top-right, always visible) -->
 <button id="btn-gear" class="icon-btn" title="Settings">⚙</button>
@@ -20,21 +22,30 @@
 <!-- ════════ LANDING ════════ -->
 <div id="landing">
   <header class="brand">
-    <div class="logo-wrap">
-      <div class="logo">osu!</div>
-      <div class="logo-ring"></div>
+    <div class="hero">
+      <canvas id="visualizer" class="visualizer" aria-hidden="true"></canvas>
+      <button id="osu-cookie" class="cookie" title="Choose replays / start" aria-label="osu!">
+        <span class="cookie-halo"></span>
+        <span class="cookie-disc">
+          <canvas class="cookie-tri" aria-hidden="true"></canvas>
+          <span class="cookie-label">osu!</span>
+        </span>
+      </button>
     </div>
     <div class="brand-sub">REPLAY&nbsp;&nbsp;VIEWER</div>
   </header>
 
   <div id="dropzone" class="glass">
-    <div class="dz-icon">⤓</div>
-    <div class="dz-title">Drop your <b>.osr</b> replays here</div>
-    <div class="dz-sub">1 replay to watch &nbsp;·&nbsp; 2 replays to compare</div>
-    <div class="dz-auto">✦ the beatmap downloads automatically ✦</div>
-    <div class="dz-buttons">
-      <button id="btn-replays" class="btn btn-pink">Choose replays…</button>
-      <button id="btn-map" class="btn btn-ghost">Beatmap (.osz / .osu)</button>
+    <canvas class="dz-tri" aria-hidden="true"></canvas>
+    <div class="dz-inner">
+      <div class="dz-icon">⤓</div>
+      <div class="dz-title">Drop your <b>.osr</b> replays here</div>
+      <div class="dz-sub">1 replay to watch &nbsp;·&nbsp; 2 replays to compare</div>
+      <div class="dz-auto">✦ the beatmap downloads automatically ✦</div>
+      <div class="dz-buttons">
+        <button id="btn-replays" class="btn btn-pink">Choose replays…</button>
+        <button id="btn-map" class="btn btn-ghost">Beatmap (.osz / .osu)</button>
+      </div>
     </div>
   </div>
 
