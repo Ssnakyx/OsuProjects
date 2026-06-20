@@ -293,6 +293,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         if cache:
             self.send_header("Cache-Control", "max-age=3600")
+        else:
+            # App files (HTML/CSS/JS) must never be served stale — without an
+            # explicit directive browsers heuristic-cache them, so a redesign
+            # shows up half-applied (mixed old CSS + new HTML).
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         with open(path, "rb") as f:
             f.seek(start)
