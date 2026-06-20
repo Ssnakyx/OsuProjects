@@ -7,7 +7,7 @@ import {
 } from "./core.js";
 import { prepareSliders } from "./render.js";
 import { prepStats } from "./stats.js";
-import { setPlaying, setSpeed, initSfx, tick } from "./playback.js";
+import { setPlaying, setSpeed, initSfx, tick, stopAudio } from "./playback.js";
 import { applySettings, startParticles, stopParticles } from "./settings.js";
 import { saveRecentReplays } from "./recent.js";
 
@@ -174,7 +174,7 @@ export function enterPlayer() {
   $("btn-mode").classList.toggle("hidden", !(S.replays[0] && S.replays[1]));
 
   $("bg-layer").style.backgroundImage = S.map.bg ? `url(${S.map.bg})` : "none";
-  if (S.audio) { S.audio.pause(); S.audio = null; }
+  stopAudio();
   if (S.map.audio) {
     S.audio = new Audio(S.map.audio);
     S.audio.preload = "auto";
@@ -210,11 +210,12 @@ export function goLanding() {
 }
 
 export async function clearSession() {
-  try { await fetch("/api/clear", { method: "POST" }); } catch (e) {}
-  // Stop the previous map's song right away — otherwise it keeps playing
-  // while the next map downloads, until enterPlayer() replaces it.
-  if (S.audio) { S.audio.pause(); S.audio = null; }
+  // Stop the previous map's song *before* the await — otherwise it keeps
+  // playing (and the tick loop keeps re-issuing play()) while the next map
+  // downloads. stopAudio() fully tears the element down, not just pause().
+  stopAudio();
   S.playing = false;
+  try { await fetch("/api/clear", { method: "POST" }); } catch (e) {}
   S.replays = [null, null]; S.replayBytes = [null, null]; S.events = [null, null]; S.map = null;
   $("btn-watch").classList.add("disabled");
   chip("chip-r0", "waiting for file…");

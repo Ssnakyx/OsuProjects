@@ -39,6 +39,22 @@ export function setPlaying(p) {
   else { S.lastNow = performance.now(); syncAudio(true); }
 }
 
+/* Fully tear down the current song. Just `pause()`-ing and nulling the
+   reference is NOT enough: an <audio> element with preload="auto" keeps its
+   network/decode pipeline alive while buffering, and an in-flight play()
+   promise can resume it — which is why the *previous* map's song kept
+   playing. Clearing src + load() aborts the pipeline and resets the element. */
+export function stopAudio() {
+  const a = S.audio;
+  S.audio = null;
+  if (!a) return;
+  try {
+    a.pause();
+    a.removeAttribute("src");
+    a.load();   // abort pending network + decode, reset element state
+  } catch (e) { /* ignore */ }
+}
+
 export function syncAudio(force) {
   const a = S.audio;
   if (!a) return;
@@ -47,7 +63,9 @@ export function syncAudio(force) {
   a.playbackRate = S.speed;
   if (force || a.paused || Math.abs(a.currentTime - target) > 0.12) {
     try { a.currentTime = Math.max(0, target); } catch (e) {}
-    a.play().then(() => { S.audioBlocked = false; }).catch(() => { S.audioBlocked = true; });
+    a.play()
+      .then(() => { if (S.audio === a) S.audioBlocked = false; })
+      .catch(() => { if (S.audio === a) S.audioBlocked = true; });
   }
 }
 
