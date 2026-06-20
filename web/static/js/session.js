@@ -120,7 +120,13 @@ async function autoFetch(md5) {
 }
 
 export async function afterFilesChanged() {
-  if (!S.map && S.replays[0] && !S.mapFetching) { autoFetch(S.replays[0].md5); return; }
+  // Await the download: if this is fire-and-forget, dropping two replays at
+  // once races — the 2nd replay registers while the map is still downloading
+  // (so its events are never fetched), and autoFetch's own reconciliation may
+  // run before the 2nd slot exists. Awaiting keeps intake fully sequential, so
+  // by the time the next replay is processed the map is ready and its events
+  // get fetched. (Was: only one of the two replays showing until a restart.)
+  if (!S.map && S.replays[0] && !S.mapFetching) { await autoFetch(S.replays[0].md5); return; }
   if (S.map) {
     for (const slot of [0, 1]) {
       if (S.replays[slot] && !S.events[slot]) {
