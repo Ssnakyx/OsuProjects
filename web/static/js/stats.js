@@ -65,18 +65,25 @@ export function updateHUD() {
     const i = upperBound(evs, S.t) - 1;
     const ev = i >= 0 ? evs[i] : null;
     $(`p${slot}-score`).textContent = (ev ? ev[1] : 0).toLocaleString("en-US");
-    $(`p${slot}-combo`).textContent = (ev ? ev[2] : 0) + "x";
+    $(`p${slot}-combo`).textContent = (ev ? ev[2] : 0) + "×";
     $(`p${slot}-acc`).textContent = (ev ? ev[3] : 100).toFixed(2) + "%";
-    $(`p${slot}-counts`).textContent = ev ? `300×${ev[8]} 100×${ev[9]} 50×${ev[10]} ✕${ev[11]}` : "";
-    $(`p${slot}-ur`).textContent = OPT.showUR ? `${urAt(slot, S.t).toFixed(0)} UR` : "";
-    $(`p${slot}-pp`).textContent = OPT.showPP ? `≈${Math.round(ppAt(slot, S.t))}pp` : "";
+    $(`n300_${slot}`).textContent = ev ? ev[8] : 0;
+    $(`n100_${slot}`).textContent = ev ? ev[9] : 0;
+    $(`n50_${slot}`).textContent  = ev ? ev[10] : 0;
+    $(`nx_${slot}`).textContent   = ev ? ev[11] : 0;
+    $(`p${slot}-ur-box`).hidden = !OPT.showUR;
+    $(`p${slot}-pp-box`).hidden = !OPT.showPP;
+    if (OPT.showUR) $(`p${slot}-ur`).textContent = urAt(slot, S.t).toFixed(0);
+    if (OPT.showPP) $(`p${slot}-pp`).textContent = "≈" + Math.round(ppAt(slot, S.t));
   }
+  updateLead();
 
-  if (!S.seeking) {
-    const frac = (S.t - S.origin) / (S.endT - S.origin);
-    $("seek").value = Math.round(clamp(frac, 0, 1) * 1000);
-  }
-  $("time-label").textContent = `${fmtTime(S.t - S.origin)} / ${fmtTime(S.endT - S.origin)}`;
+  const frac = clamp((S.t - S.origin) / (S.endT - S.origin), 0, 1);
+  if (!S.seeking) $("seek").value = Math.round(frac * 1000);
+  $("seek-fill").style.width = frac * 100 + "%";
+  $("seek-thumb").style.left = frac * 100 + "%";
+  $("time-cur").textContent = fmtTime(S.t - S.origin);
+  $("time-dur").textContent = fmtTime(S.endT - S.origin);
 
   const first = S.map.objects.length ? S.map.objects[0].t : 0;
   $("btn-skip").classList.toggle("hidden", !(S.t < first - S.preempt - 1000 && S.playing));
@@ -84,6 +91,40 @@ export function updateHUD() {
   $("state-line").textContent =
     !S.playing && S.t < S.endT ? "PAUSED"
     : S.audioBlocked ? "click anywhere to enable audio" : "";
+}
+
+/* ── lead meter (centre column, two-replay comparison only) ────────── */
+
+function scoreAt(slot) {
+  const ed = S.events[slot];
+  if (!ed) return 0;
+  const i = upperBound(ed.events, S.t) - 1;
+  return i >= 0 ? ed.events[i][1] : 0;
+}
+
+function updateLead() {
+  const lead = $("lead");
+  if (!(S.replays[0] && S.replays[1] && S.events[0] && S.events[1])) {
+    lead.hidden = true;
+    return;
+  }
+  lead.hidden = false;
+  const s0 = scoreAt(0), s1 = scoreAt(1);
+  const share = s0 / (s0 + s1 || 1);   // P1's share of the total, filled from the left
+  $("lead-fill").style.width = share * 100 + "%";
+  $("lead-mark").style.left = share * 100 + "%";
+
+  const diff = s0 - s1;
+  const gap = $("lead-gap");
+  if (Math.abs(diff) < 400) {
+    gap.textContent = "dead even"; gap.className = "gap";
+  } else if (diff > 0) {
+    gap.textContent = `${S.replays[0].player} +${Math.round(diff).toLocaleString("en-US")}`;
+    gap.className = "gap p0";
+  } else {
+    gap.textContent = `${S.replays[1].player} +${Math.round(-diff).toLocaleString("en-US")}`;
+    gap.className = "gap p1";
+  }
 }
 
 /* ── hit-distribution histogram panel ──────────────────────────────── */

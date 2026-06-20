@@ -1,7 +1,7 @@
 /* Entry point: wires up the DOM (buttons, drag & drop, keyboard, sliders)
    and boots the app. Loaded as a module, so it runs after the DOM is ready. */
 
-import { SPEED_OPTS, APP_VERSION } from "./config.js";
+import { SPEED_OPTS, APP_VERSION, ICONS } from "./config.js";
 import { $, S, OPT, toast, landing, canvas, saveSettings, resetOptions } from "./core.js";
 import { loadSkin } from "./skin.js";
 import { handleFiles, clearSession, goLanding, enterPlayer, maybeStart } from "./session.js";
@@ -19,7 +19,7 @@ import { startLandingFx, sizeLandingFx } from "./landing-fx.js";
 function toggleMode() {
   if (!(S.replays[0] && S.replays[1])) return;
   S.mode = S.mode === "overlay" ? "split" : "overlay";
-  $("btn-mode").textContent = S.mode === "overlay" ? "SPLIT" : "OVERLAY";
+  $("mode-txt").textContent = S.mode === "overlay" ? "SPLIT" : "OVERLAY";
 }
 function toggleStats() { $("stats-panel").classList.toggle("hidden"); }
 
@@ -156,6 +156,8 @@ document.addEventListener("pointerdown", e => {
 });
 
 /* ── boot ──────────────────────────────────────────────────────────── */
+
+document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.dataset.ic] || ""; });
 
 loadSkin();
 bindSettings();

@@ -2,6 +2,7 @@
    audio sync and the main requestAnimationFrame loop (`tick`). */
 
 import { $, S, OPT, clamp, upperBound, frameIndexAt } from "./core.js";
+import { ICONS } from "./config.js";
 import { draw } from "./render.js";
 import { drawStats, updateHUD } from "./stats.js";
 import { showResults } from "./screens.js";
@@ -34,7 +35,7 @@ function playHitSound() {
 
 export function setPlaying(p) {
   S.playing = p;
-  $("btn-play").textContent = p ? "⏸" : "▶";
+  $("btn-play").innerHTML = p ? ICONS.pause : ICONS.play;
   if (!p) { if (S.audio) S.audio.pause(); }
   else { S.lastNow = performance.now(); syncAudio(true); }
 }

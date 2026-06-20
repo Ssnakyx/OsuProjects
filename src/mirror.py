@@ -14,7 +14,7 @@ from typing import Callable, Optional
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".osu-replay-viewer", "maps")
 
-_UA = "osu-replay-viewer/2.0 (+https://github.com/Ssnakyx/OsuProjects)"
+_UA = "osu-replay-viewer/2.0"
 
 _LOOKUP_URLS = [
     "https://osu.direct/api/v2/md5/{md5}",

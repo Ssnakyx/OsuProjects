@@ -91,24 +91,63 @@
   <div id="bg-tint"></div>
 
   <header id="hud-top">
-    <div class="panel left" id="panel-0">
-      <div class="p-row1"><span class="p-name pill0" id="p0-name">—</span><span class="p-mods" id="p0-mods"></span></div>
-      <div class="p-score c0" id="p0-score">0</div>
-      <div class="p-row3"><span class="p-acc" id="p0-acc">100.00%</span><span class="p-combo c0" id="p0-combo">0x</span></div>
-      <div class="p-row4"><span class="p-counts" id="p0-counts"></span><span class="p-ur" id="p0-ur"></span><span class="p-pp" id="p0-pp"></span></div>
+    <div class="pl pl0 left" id="panel-0">
+      <div class="pl-id">
+        <div class="av" id="p0-av">P</div>
+        <div class="pl-name" id="p0-name">—</div>
+        <div class="pl-mods" id="p0-mods"></div>
+      </div>
+      <div class="pl-score" id="p0-score">0</div>
+      <div class="pl-meta">
+        <div class="meta"><span class="k">Accuracy</span><span class="v" id="p0-acc">100.00%</span></div>
+        <div class="meta combo"><span class="k">Combo</span><span class="v" id="p0-combo">0×</span></div>
+        <div class="meta stat" id="p0-ur-box"><span class="k">UR</span><span class="v" id="p0-ur">0</span></div>
+        <div class="meta stat" id="p0-pp-box"><span class="k">PP</span><span class="v" id="p0-pp">0</span></div>
+      </div>
+      <div class="pl-counts">
+        <span class="cnt j300"><span class="pip"></span><span id="n300_0">0</span></span>
+        <span class="cnt j100"><span class="pip"></span><span id="n100_0">0</span></span>
+        <span class="cnt j50"><span class="pip"></span><span id="n50_0">0</span></span>
+        <span class="cnt miss"><span class="pip"></span><span id="nx_0">0</span></span>
+      </div>
     </div>
 
-    <div class="center-info">
-      <div id="map-title">—</div>
+    <div class="centre">
+      <div class="map-title" id="map-title">—</div>
       <div id="clock">00:00.00</div>
-      <div id="state-line"></div>
+      <div class="state" id="state-line"></div>
+      <div class="lead" id="lead" hidden>
+        <div class="lead-track">
+          <div class="lead-fill" id="lead-fill" style="width:50%"></div>
+          <div class="lead-mark" id="lead-mark" style="left:50%"></div>
+        </div>
+        <div class="lead-row">
+          <span class="lead-tag"><span class="lead-dot d0"></span>P1</span>
+          <span class="gap" id="lead-gap">dead even</span>
+          <span class="lead-tag">P2<span class="lead-dot d1"></span></span>
+        </div>
+      </div>
     </div>
 
-    <div class="panel right hidden" id="panel-1">
-      <div class="p-row1"><span class="p-mods" id="p1-mods"></span><span class="p-name pill1" id="p1-name">—</span></div>
-      <div class="p-score c1" id="p1-score">0</div>
-      <div class="p-row3"><span class="p-combo c1" id="p1-combo">0x</span><span class="p-acc" id="p1-acc">100.00%</span></div>
-      <div class="p-row4"><span class="p-pp" id="p1-pp"></span><span class="p-ur" id="p1-ur"></span><span class="p-counts" id="p1-counts"></span></div>
+    <div class="pl pl1 right hidden" id="panel-1">
+      <div class="pl-id">
+        <div class="av" id="p1-av">P</div>
+        <div class="pl-name" id="p1-name">—</div>
+        <div class="pl-mods" id="p1-mods"></div>
+      </div>
+      <div class="pl-score" id="p1-score">0</div>
+      <div class="pl-meta">
+        <div class="meta"><span class="k">Accuracy</span><span class="v" id="p1-acc">100.00%</span></div>
+        <div class="meta combo"><span class="k">Combo</span><span class="v" id="p1-combo">0×</span></div>
+        <div class="meta stat" id="p1-ur-box"><span class="k">UR</span><span class="v" id="p1-ur">0</span></div>
+        <div class="meta stat" id="p1-pp-box"><span class="k">PP</span><span class="v" id="p1-pp">0</span></div>
+      </div>
+      <div class="pl-counts">
+        <span class="cnt j300"><span class="pip"></span><span id="n300_1">0</span></span>
+        <span class="cnt j100"><span class="pip"></span><span id="n100_1">0</span></span>
+        <span class="cnt j50"><span class="pip"></span><span id="n50_1">0</span></span>
+        <span class="cnt miss"><span class="pip"></span><span id="nx_1">0</span></span>
+      </div>
     </div>
   </header>
 
@@ -124,39 +163,52 @@
   </div>
 
   <footer id="hud-bottom">
-    <div class="ctl-group">
-      <button class="ctl" id="btn-play" title="Space">⏸</button>
-      <button class="ctl" id="btn-restart" title="R">↺</button>
-      <button class="ctl" id="btn-step-b" title="Step back (,)">⏮</button>
-      <button class="ctl" id="btn-step-f" title="Step forward (.)">⏭</button>
+    <div class="t-left">
+      <button class="playbtn" id="btn-play" title="Space"></button>
+      <div class="seg">
+        <button class="icbtn" id="btn-restart" data-ic="restart" title="Restart (R)"></button>
+        <button class="icbtn" id="btn-step-b" data-ic="stepB" title="Step back (,)"></button>
+        <button class="icbtn" id="btn-step-f" data-ic="stepF" title="Step forward (.)"></button>
+      </div>
     </div>
 
-    <div class="ctl-seek">
-      <span id="time-label">00:00 / 00:00</span>
-      <input type="range" id="seek" min="0" max="1000" value="0" step="1">
-      <select id="speed" title="Playback speed">
-        <option value="0.25">0.25×</option>
-        <option value="0.5">0.5×</option>
-        <option value="0.75">0.75×</option>
-        <option value="1" selected>1×</option>
-        <option value="1.25">1.25×</option>
-        <option value="1.5">1.5×</option>
-        <option value="2">2×</option>
-      </select>
+    <div class="t-seek">
+      <span class="tlabel" id="time-cur">00:00</span>
+      <div class="track" id="seek-track">
+        <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="seek">
+        <div class="track-bg"></div>
+        <div class="track-fill" id="seek-fill"></div>
+        <div class="track-thumb" id="seek-thumb"></div>
+      </div>
+      <span class="tlabel dim" id="time-dur">00:00</span>
     </div>
 
-    <div class="ctl-group ctl-vol">
-      <span class="vol-group">♫<input type="range" id="vol-music" min="0" max="100" value="70"></span>
-      <span class="vol-group">SFX<input type="range" id="vol-sfx" min="0" max="100" value="80"></span>
-    </div>
-
-    <div class="ctl-group">
-      <button class="ctl wide" id="btn-mode" title="Tab">SPLIT</button>
-      <button class="ctl" id="btn-stats" title="Stats (D)">📊</button>
-      <button class="ctl" id="btn-set" title="Settings">⚙</button>
-      <button class="ctl" id="btn-files" title="Load other files">＋</button>
-      <button class="ctl" id="btn-full" title="F">⛶</button>
-      <button class="ctl" id="btn-help" title="H">?</button>
+    <div class="t-right">
+      <div class="speed"><span class="lbl">SPEED</span>
+        <select id="speed" title="Playback speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </div>
+      <div class="divider"></div>
+      <span class="vol" title="Music" data-ic="music"></span>
+      <input type="range" class="mini" id="vol-music" min="0" max="100" value="70" aria-label="music volume">
+      <span class="vol" title="SFX" data-ic="sfx"></span>
+      <input type="range" class="mini" id="vol-sfx" min="0" max="100" value="80" aria-label="sfx volume">
+      <div class="divider"></div>
+      <button class="modepill hidden" id="btn-mode" title="Tab"><span class="led"></span><span id="mode-txt">SPLIT</span></button>
+      <div class="seg">
+        <button class="icbtn" id="btn-stats" data-ic="stats" title="Hit distribution (D)"></button>
+        <button class="icbtn" id="btn-set" data-ic="settings" title="Settings"></button>
+        <button class="icbtn" id="btn-files" data-ic="files" title="Load other files"></button>
+        <button class="icbtn" id="btn-full" data-ic="full" title="Fullscreen (F)"></button>
+        <button class="icbtn" id="btn-help" title="Shortcuts (H)">?</button>
+      </div>
     </div>
   </footer>
 </div>
