@@ -721,39 +721,55 @@ body.no-hud #hud-top, body.no-hud #hud-bottom { opacity: 0; pointer-events: none
   position: relative;
   background: var(--surface);
   border: 1px solid var(--stroke);
+  border-top: 3px solid var(--pc, var(--accent));
   border-radius: var(--r-lg);
-  padding: 22px 22px 20px;
-  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 22px 18px;
   overflow: hidden;
 }
-.res-card::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(120% 80% at 50% -10%, var(--grade-tint, transparent) 0%, transparent 55%);
-  opacity: .5;
-}
-.res-player { font-size: 14.5px; font-weight: 700; color: var(--text); margin-bottom: 14px; text-align: center; z-index: 1; }
-.res-mods { color: var(--yellow); font-size: 11.5px; font-weight: 700; }
+.res-tri { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .6; }
+.res-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+.res-player { font-size: 14.5px; font-weight: 700; color: var(--text); margin-bottom: 12px; text-align: center; display: flex; gap: 8px; align-items: center; }
+.res-mods { color: var(--yellow); font-size: 11px; font-weight: 700; background: rgba(255,212,68,.14); border-radius: var(--r-pill); padding: 2px 8px; }
 
-.res-grade {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 78px; font-weight: 900; line-height: 1;
-  margin: 4px 0 14px; letter-spacing: -3px;
-  text-shadow: 0 0 34px currentColor;
-  animation: grade-pop .55s cubic-bezier(.2,.9,.2,1.4);
-  z-index: 1;
+/* ── animated grade ring (results centrepiece) ── */
+.grade-ring { position: relative; width: 172px; height: 172px; --gc: #54e08a; }
+.gr-SS, .gr-SSH { --gc: #ffd447; } .gr-S, .gr-SH { --gc: #ffe27a; }
+.gr-A { --gc: #54e08a; } .gr-B { --gc: #66ccff; } .gr-C { --gc: #b06bff; } .gr-D { --gc: #ff5b6b; }
+.grade-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--surface-3); stroke-width: 7; }
+.ring-fg {
+  fill: none; stroke: var(--gc); stroke-width: 7; stroke-linecap: round;
+  filter: drop-shadow(0 0 8px var(--gc));
 }
-@keyframes grade-pop { from { opacity: 0; transform: scale(.35) rotate(-14deg); } }
-.grade-SS, .grade-SSH { color: #ffd447; --grade-tint: rgba(255,212,71,.28); }
-.grade-S,  .grade-SH  { color: #ffe27a; --grade-tint: rgba(255,226,122,.24); }
-.grade-A { color: #54e08a; --grade-tint: rgba(84,224,138,.24); }
-.grade-B { color: #5b9dff; --grade-tint: rgba(91,157,255,.24); }
-.grade-C { color: #b06bff; --grade-tint: rgba(176,107,255,.24); }
-.grade-D { color: #ff5b6b; --grade-tint: rgba(255,91,107,.24); }
-.grade-SSH, .grade-SH { filter: saturate(.2) brightness(1.3); }
+.ring-bloom {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--gc) 25%, transparent), transparent 62%);
+  opacity: 0; transform: scale(.4);
+  transition: opacity .5s ease, transform .5s var(--ease);
+  transition-delay: .5s;
+}
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-letter {
+  font-family: var(--font-mono); font-weight: 900; line-height: 1;
+  font-size: 72px; letter-spacing: -3px; color: var(--gc);
+  text-shadow: 0 0 34px var(--gc);
+  opacity: 0; transform: scale(.3) rotate(-16deg);
+  transition: opacity .5s ease, transform .6s cubic-bezier(.2,.9,.2,1.5);
+  transition-delay: .55s;
+}
+.gr-SSH .ring-letter, .gr-SH .ring-letter { filter: saturate(.2) brightness(1.3); }
+.ring-acc {
+  font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: var(--text); margin-top: 5px;
+  opacity: 0; transition: opacity .4s ease; transition-delay: .5s;
+}
+.grade-ring.show .ring-bloom { opacity: 1; transform: scale(1); }
+.grade-ring.show .ring-letter { opacity: 1; transform: none; }
+.grade-ring.show .ring-acc { opacity: 1; }
 
 .res-score {
-  font-size: 38px; font-weight: 800; font-variant-numeric: tabular-nums;
-  line-height: 1; margin-bottom: 4px; letter-spacing: -1px; z-index: 1;
+  font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums;
+  line-height: 1; margin-top: 14px; margin-bottom: 4px; letter-spacing: -1px;
 }
 .res-score-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); margin-bottom: 18px; z-index: 1; }
 
@@ -781,7 +797,8 @@ body.no-hud #hud-top, body.no-hud #hud-bottom { opacity: 0; pointer-events: none
 
 @media (max-width: 620px) {
   #results-grid.two { grid-template-columns: 1fr; }
-  .res-grade { font-size: 60px; }
+  .grade-ring { width: 150px; height: 150px; }
+  .ring-letter { font-size: 62px; }
 }
 
 /* ════════ FPS / toasts ════════ */

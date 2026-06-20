@@ -10,8 +10,9 @@ const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const REDUCE = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* Triangle field bound to one canvas. `data-full` sizes to the viewport,
-   otherwise it tracks its positioned parent. */
-function triLayer(canvas, opt) {
+   otherwise it tracks its positioned parent. Exported so other screens
+   (e.g. the results cards) can reuse the osu!lazer triangle motif. */
+export function triLayer(canvas, opt) {
   const ctx = canvas.getContext("2d");
   const o = Object.assign(
     { count: 24, color: "rgba(255,255,255,.05)", speed: 1, minSize: 40, maxSize: 180, opacity: 1, frac: null },
