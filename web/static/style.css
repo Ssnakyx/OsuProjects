@@ -1,40 +1,83 @@
 /* ════════════════════════════════════════════════════════════════════
-   osu! Replay Viewer — clean dark UI
+   osu! Replay Viewer — osu!lazer-style glass UI
+   Design tokens imported from the "osu! Replay Viewer Design System"
+   (claude.ai/design): warm plum-black canvas, translucent glass surfaces,
+   themeable accent, Nunito (Torus stand-in), tabular figures, alive motion.
    ════════════════════════════════════════════════════════════════════ */
 
+/* Nunito — the community open stand-in for osu!lazer's proprietary "Torus" */
+@import url("https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700&display=swap");
+
 :root {
-  --bg:        #08070d;
-  --bg2:       #110f1a;
+  /* ── canvas (warm, pink-tinted near-black — osu!lazer menu) ── */
+  --bg:        #160d13;   /* app background, warm plum-black */
+  --bg2:       #271d24;   /* raised solid panel             */
+
+  /* ── translucent surfaces (stack over the bg / beatmap art) ── */
   --surface:   rgba(255, 255, 255, .045);
   --surface-2: rgba(255, 255, 255, .07);
   --surface-3: rgba(255, 255, 255, .11);
   --stroke:    rgba(255, 255, 255, .09);
   --stroke-2:  rgba(255, 255, 255, .16);
+
+  /* ── text ── */
   --text:      #edecf6;
   --dim:       #9a9ac0;
   --dimmer:    #5e5e82;
 
-  /* accent — overridden by JS theme presets */
+  /* ── accent (DEFAULT = pink) — overridden live by JS theme presets ── */
   --accent:      #ff66aa;
   --accent-2:    #c94e85;
   --accent-glow: rgba(255, 102, 170, .45);
   --accent-soft: rgba(255, 102, 170, .14);
 
-  --blue:    #64aeff;
-  --yellow:  #ffd444;
-  --green:   #5fe08a;
-  --red:     #ff4b5a;
+  /* ── fixed status / data colours ── */
+  --blue:    #66ccff;     /* player 2, info (osu!lazer blue) */
+  --yellow:  #ffd444;     /* mods, busy state, 50s          */
+  --green:   #5fe08a;     /* success, 100s                  */
+  --red:     #ff4b5a;     /* error, miss                    */
   --p0:      var(--accent);
-  --p1:      #64aeff;
+  --p1:      #66ccff;
 
-  --r-sm: 10px;
-  --r:    14px;
-  --r-lg: 22px;
+  /* ── osu! judgment colours ── */
+  --judge-300: #66ccff;
+  --judge-100: #54e08a;
+  --judge-50:  #ffd447;
+  --judge-miss:#ff5b6b;
 
-  --shadow:   0 24px 70px rgba(0, 0, 0, .5);
+  /* ── typography ── */
+  --font-sans: "Nunito", -apple-system, "Segoe UI", "Helvetica Neue", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── spacing scale (px) ── */
+  --s-1: 3px;  --s-2: 7px;  --s-3: 11px; --s-4: 14px;
+  --s-5: 18px; --s-6: 24px; --s-7: 32px; --s-8: 40px;
+
+  /* ── radii ── */
+  --r-sm:   10px;
+  --r:      14px;
+  --r-lg:   22px;
+  --r-pill: 999px;
+
+  /* ── shadows & glow ── */
+  --shadow:    0 24px 70px rgba(0, 0, 0, .5);
   --shadow-sm: 0 8px 24px rgba(0, 0, 0, .35);
-  --ease: cubic-bezier(.2, .8, .2, 1);
+  --glow:      0 8px 24px var(--accent-glow);
+  --glow-lg:   0 12px 36px var(--accent-glow);
+  --ring:      0 0 0 4px var(--accent-soft);
+
+  /* ── motion ── */
+  --ease:   cubic-bezier(.2, .8, .2, 1);
+  --d-fast: .12s; --d-base: .2s; --d-slow: .3s;
 }
+
+/* ── accent presets (JS sets the 4 --accent-* vars; mirror them here) ── */
+.accent-pink   { --accent:#ff66aa; --accent-2:#c94e85; --accent-glow:rgba(255,102,170,.45); --accent-soft:rgba(255,102,170,.14); }
+.accent-blue   { --accent:#5b9dff; --accent-2:#3f6fd1; --accent-glow:rgba(91,157,255,.45);  --accent-soft:rgba(91,157,255,.14); }
+.accent-green  { --accent:#54e08a; --accent-2:#33b069; --accent-glow:rgba(84,224,138,.42);  --accent-soft:rgba(84,224,138,.14); }
+.accent-purple { --accent:#b06bff; --accent-2:#8a44e0; --accent-glow:rgba(176,107,255,.45); --accent-soft:rgba(176,107,255,.14); }
+.accent-orange { --accent:#ff9a3c; --accent-2:#e0741a; --accent-glow:rgba(255,154,60,.42);  --accent-soft:rgba(255,154,60,.14); }
+.accent-red    { --accent:#ff5b6b; --accent-2:#d13b4b; --accent-glow:rgba(255,91,107,.45);  --accent-soft:rgba(255,91,107,.14); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -42,7 +85,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", -apple-system, "Segoe UI", "Helvetica Neue", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.4;
   overflow: hidden;
@@ -381,7 +424,7 @@ body.playing #btn-gear { display: none; }
   position: relative; z-index: 2;
   display: flex; align-items: stretch; justify-content: space-between; gap: 14px;
   padding: 14px 20px;
-  background: linear-gradient(180deg, rgba(8,7,13,.92), rgba(8,7,13,.45));
+  background: linear-gradient(180deg, rgba(22,13,19,.92), rgba(22,13,19,.45));
   border-bottom: 1px solid var(--stroke);
   backdrop-filter: blur(8px);
 }
@@ -403,7 +446,7 @@ body.no-hud #hud-top, body.no-hud #hud-bottom { opacity: 0; pointer-events: none
 .panel.right .p-row1 { flex-direction: row-reverse; }
 .p-name { font-size: 12.5px; font-weight: 700; letter-spacing: .3px; padding: 3px 12px; border-radius: 999px; }
 .pill0 { color: var(--p0); background: color-mix(in srgb, var(--p0) 18%, transparent); }
-.pill1 { color: var(--p1); background: rgba(100,174,255,.18); }
+.pill1 { color: var(--p1); background: rgba(102,204,255,.18); }
 .p-mods { font-size: 10.5px; font-weight: 700; color: var(--yellow); background: rgba(255,212,68,.14); border-radius: 999px; padding: 3px 9px; letter-spacing: .5px; }
 .p-mods:empty { display: none; }
 .p-score { font-size: 33px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -.5px; margin: 2px 0; }
@@ -458,7 +501,7 @@ body.no-hud #hud-top, body.no-hud #hud-bottom { opacity: 0; pointer-events: none
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 14px;
   padding: 11px 18px;
-  background: linear-gradient(0deg, rgba(8,7,13,.95), rgba(8,7,13,.55));
+  background: linear-gradient(0deg, rgba(22,13,19,.95), rgba(22,13,19,.55));
   border-top: 1px solid var(--stroke);
   backdrop-filter: blur(8px);
   flex-wrap: wrap;
@@ -702,7 +745,7 @@ body.no-hud #hud-top, body.no-hud #hud-bottom { opacity: 0; pointer-events: none
   pointer-events: none;
 }
 .toast {
-  background: rgba(17,15,26,.97);
+  background: rgba(39,29,36,.97);
   border: 1px solid var(--stroke);
   border-left: 3px solid var(--accent);
   border-radius: var(--r-sm);
