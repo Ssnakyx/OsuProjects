@@ -30,7 +30,7 @@ const PATCH_NOTES = [
     changes: [
       { tag: "added", items: [
         "Watch on another device — run <code>python main.py --web --lan</code> and the viewer is reachable from any phone or PC on the same Wi-Fi.",
-        "The LAN address (e.g. <code>http://192.168.1.42:7270</code>) is printed on startup so you know what to type.",
+        "The LAN address (e.g. <code>http://YOUR-IP:7270</code>) is printed on startup so you know what to type.",
         "New <code>--host</code> flag to bind a specific network interface.",
         "This <b>What's new</b> page.",
       ]},
