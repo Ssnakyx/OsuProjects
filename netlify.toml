@@ -1,0 +1,16 @@
+# Netlify deploys the serverless (Pyodide) static build only.
+#
+# `base = "web"` matters: Netlify looks for dependency files (requirements.txt,
+# Pipfile, …) in the base directory. The repo-root requirements.txt pulls in
+# pygame, which needs SDL headers to compile and fails in Netlify's image — and
+# the static build doesn't need it. There is no requirements.txt under web/, so
+# Netlify skips the pip step entirely.
+#
+# The build command still runs from web/, and build_static.py locates the repo
+# root via its own path, so it can read ../src and ../osu-hit-sound.mp3.
+# `command` and `publish` are both relative to the base directory.
+
+[build]
+  base = "web"
+  command = "python3 build_static.py --out dist"
+  publish = "dist"
