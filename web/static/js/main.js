@@ -1,7 +1,7 @@
 /* Entry point: wires up the DOM (buttons, drag & drop, keyboard, sliders)
    and boots the app. Loaded as a module, so it runs after the DOM is ready. */
 
-import { SPEED_OPTS, APP_VERSION } from "./config.js";
+import { SPEED_OPTS, APP_VERSION, ICONS } from "./config.js";
 import { $, S, OPT, toast, landing, canvas, saveSettings, resetOptions } from "./core.js";
 import { loadSkin } from "./skin.js";
 import { handleFiles, clearSession, goLanding, enterPlayer, maybeStart } from "./session.js";
@@ -12,13 +12,14 @@ import {
 } from "./settings.js";
 import { openPatch, closePatch, closeResults } from "./screens.js";
 import { openDB, getRecent, renderRecent, clearRecent } from "./recent.js";
+import { startLandingFx, sizeLandingFx } from "./landing-fx.js";
 
 /* ── small view toggles ────────────────────────────────────────────── */
 
 function toggleMode() {
   if (!(S.replays[0] && S.replays[1])) return;
   S.mode = S.mode === "overlay" ? "split" : "overlay";
-  $("btn-mode").textContent = S.mode === "overlay" ? "SPLIT" : "OVERLAY";
+  $("mode-txt").textContent = S.mode === "overlay" ? "SPLIT" : "OVERLAY";
 }
 function toggleStats() { $("stats-panel").classList.toggle("hidden"); }
 
@@ -37,6 +38,9 @@ window.addEventListener("drop", e => {
 
 $("btn-replays").onclick = () => $("file-replays").click();
 $("btn-map").onclick = () => $("file-map").click();
+// The cookie logo: start if a replay is ready, otherwise open the file picker.
+$("osu-cookie").onclick = () =>
+  $("btn-watch").classList.contains("disabled") ? $("file-replays").click() : enterPlayer();
 $("file-replays").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
 $("file-map").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
 
@@ -101,7 +105,7 @@ document.addEventListener("click", () => {
   if (S.actx && S.actx.state === "suspended") S.actx.resume();
 });
 
-window.addEventListener("resize", () => { sizeParticles(); });
+window.addEventListener("resize", () => { sizeParticles(); sizeLandingFx(); });
 
 /* ── keyboard ──────────────────────────────────────────────────────── */
 
@@ -153,10 +157,13 @@ document.addEventListener("pointerdown", e => {
 
 /* ── boot ──────────────────────────────────────────────────────────── */
 
+document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.dataset.ic] || ""; });
+
 loadSkin();
 bindSettings();
 applySettings();
 if (OPT.bgParticles) startParticles();
+startLandingFx();
 openDB();
 getRecent().then(renderRecent);
 

@@ -144,7 +144,7 @@ function drawCircleShape(x, y, r, color, alpha) {
 function drawComboNumber(o, x, y, r, alpha) {
   if (!OPT.showNumbers) return;
   ctx.fillStyle = rgba([255, 255, 255], alpha);
-  ctx.font = `700 ${Math.max(9, r * .85)}px Inter, -apple-system, sans-serif`;
+  ctx.font = `700 ${Math.max(9, r * .85)}px Nunito, -apple-system, sans-serif`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(String(o.cn), x, y + 1);
 }
@@ -308,7 +308,7 @@ function drawJudgments(slot, tr, nPlayers) {
     const color = JUDGE_COLORS[judg];
     let x = tx(tr, ev[5]), y = ty(tr, ev[6]) - 10 * life;
     if (nPlayers === 2) x += slot === 0 ? -14 : 14;
-    ctx.font = `800 ${judg === 0 ? 19 : 15}px Inter, -apple-system, sans-serif`;
+    ctx.font = `800 ${judg === 0 ? 19 : 15}px Nunito, -apple-system, sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillStyle = rgba(color, alpha);
     ctx.fillText(judg === 0 ? "✕" : String(judg), x, y);
@@ -351,7 +351,7 @@ function drawKeyOverlay(f) {
       roundRect(x, y, box, box, 6); ctx.fill();
       ctx.lineWidth = 1; ctx.strokeStyle = on ? rgba(color, 1) : "rgba(255,255,255,.18)";
       roundRect(x, y, box, box, 6); ctx.stroke();
-      ctx.font = "700 10px Inter, -apple-system, sans-serif";
+      ctx.font = "700 10px Nunito, -apple-system, sans-serif";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = on ? "#15141f" : "rgba(255,255,255,.4)";
       ctx.fillText(lbl, x + box / 2, y + box / 2 + .5);

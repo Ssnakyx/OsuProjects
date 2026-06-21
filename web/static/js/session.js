@@ -160,7 +160,17 @@ export function enterPlayer() {
     $("panel-" + slot).classList.toggle("hidden", !r);
     if (r) {
       $(`p${slot}-name`).textContent = r.player;
-      $(`p${slot}-mods`).textContent = r.modsStr ? "+" + r.modsStr : "";
+      $(`p${slot}-av`).textContent = (r.player || "?").trim().charAt(0).toUpperCase() || "?";
+      // mod string is concatenated 2-letter codes (e.g. "HDDT") — split into chips
+      const modsEl = $(`p${slot}-mods`);
+      modsEl.innerHTML = "";
+      const ms = r.modsStr || "";
+      for (let k = 0; k < ms.length; k += 2) {
+        const chip = document.createElement("span");
+        chip.className = "mod";
+        chip.textContent = ms.slice(k, k + 2);
+        modsEl.appendChild(chip);
+      }
     }
   }
   const title = $("map-title");

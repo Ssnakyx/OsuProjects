@@ -241,6 +241,16 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         pass   # keep the console clean
 
+    def handle_one_request(self) -> None:   # noqa: N802
+        # Browsers routinely abort in-flight requests (cancelled Range
+        # fetches for audio/bg, navigating away). That surfaces here as a
+        # reset/broken pipe *before* do_GET/do_POST run, so their own
+        # try/except can't catch it. Swallow it to keep the console clean.
+        try:
+            super().handle_one_request()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+            self.close_connection = True
+
     # ---- helpers ----
 
     def _json(self, obj, code: int = 200) -> None:
@@ -293,6 +303,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         if cache:
             self.send_header("Cache-Control", "max-age=3600")
+        else:
+            # App files (HTML/CSS/JS) must never be served stale — without an
+            # explicit directive browsers heuristic-cache them, so a redesign
+            # shows up half-applied (mixed old CSS + new HTML).
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         with open(path, "rb") as f:
             f.seek(start)
