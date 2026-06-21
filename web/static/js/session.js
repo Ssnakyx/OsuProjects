@@ -5,6 +5,7 @@ import {
   S, OPT, $, toast, chip, landing, player,
   clockRate, adjDifficulty, circleRadius, preemptMs,
 } from "./core.js";
+import { api } from "./api.js";
 import { prepareSliders } from "./render.js";
 import { prepStats } from "./stats.js";
 import { setPlaying, setSpeed, initSfx, tick } from "./playback.js";
@@ -23,9 +24,7 @@ export async function handleFiles(files) {
 }
 
 export async function postReplay(buf) {
-  const res = await fetch("/api/replay?slot=auto", { method: "POST", body: buf });
-  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error; } catch (e) {} throw new Error(m); }
-  return res.json();
+  return api.postReplay(buf);
 }
 
 // md5 of the beatmap the current session is built around (driven by replays).
@@ -69,10 +68,7 @@ async function uploadReplay(file) {
 async function uploadMap(file) {
   chip("chip-map", "uploading " + file.name + "…", "busy");
   try {
-    const res = await fetch("/api/mapfile", {
-      method: "POST", headers: { "X-Filename": file.name }, body: await file.arrayBuffer(),
-    });
-    if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error; } catch (e) {} throw new Error(m); }
+    await api.uploadMap(file.name, await file.arrayBuffer());
     await fetchMap();
   } catch (e) {
     chip("chip-map", "failed — " + e.message, "err");
@@ -83,9 +79,7 @@ async function uploadMap(file) {
 }
 
 async function fetchMap() {
-  const res = await fetch("/api/map");
-  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error; } catch (e) {} throw new Error(m); }
-  S.map = await res.json();
+  S.map = await api.getMap();
   S.events = [null, null];
   chip("chip-map", `${S.map.artist} — ${S.map.title} [${S.map.version}]`, "ok");
   if (!S.map.md5Match)
@@ -96,25 +90,18 @@ async function autoFetch(md5) {
   if (S.mapFetching) return;
   S.mapFetching = true;
   chip("chip-map", "searching mirrors…", "busy");
-  const poll = setInterval(async () => {
-    try {
-      const st = await (await fetch("/api/status")).json();
-      if (st.status) {
-        const m = st.status.match(/(\d+)\s*%/);
-        chip("chip-map", st.status, "busy", m ? +m[1] : null);
-      }
-    } catch (e) { /* ignore */ }
-  }, 400);
+  const onStatus = (msg) => {
+    const m = msg.match(/(\d+)\s*%/);
+    chip("chip-map", msg, "busy", m ? +m[1] : null);
+  };
   try {
-    const res = await fetch("/api/auto?md5=" + encodeURIComponent(md5));
-    if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error; } catch (e) {} throw new Error(m); }
+    await api.autoDownload(md5, onStatus);
     await fetchMap();
     await afterFilesChanged();
   } catch (e) {
     chip("chip-map", "not found — drop the .osz manually", "err");
     toast(e.message, "error", 6000);
   } finally {
-    clearInterval(poll);
     S.mapFetching = false;
   }
 }
@@ -125,8 +112,8 @@ export async function afterFilesChanged() {
     for (const slot of [0, 1]) {
       if (S.replays[slot] && !S.events[slot]) {
         try {
-          const res = await fetch("/api/events?slot=" + slot);
-          if (res.ok) { S.events[slot] = await res.json(); prepStats(slot); }
+          const ev = await api.getEvents(slot);
+          if (ev) { S.events[slot] = ev; prepStats(slot); }
         } catch (e) { /* ignore */ }
       }
     }
@@ -220,7 +207,7 @@ export function goLanding() {
 }
 
 export async function clearSession() {
-  try { await fetch("/api/clear", { method: "POST" }); } catch (e) {}
+  await api.clear();
   // Stop the previous map's song right away — otherwise it keeps playing
   // while the next map downloads, until enterPlayer() replaces it.
   if (S.audio) { S.audio.pause(); S.audio = null; }

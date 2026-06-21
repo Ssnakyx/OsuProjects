@@ -34,3 +34,4 @@ tests/fixtures/
 
 # ── Local debug screenshots / scratch images ──
 *.png
+web/dist/

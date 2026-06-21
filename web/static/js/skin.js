@@ -2,12 +2,13 @@
    resizes them on demand (cached). Falls back to vector drawing when absent. */
 
 import { SKIN, rgba } from "./core.js";
+import { api } from "./api.js";
 
 const tintCache = new Map();
 
 export async function loadSkin() {
   try {
-    const m = await (await fetch("/api/skin")).json();
+    const m = await api.getSkin();
     if (!m.present) return;
     SKIN.present = true;
     SKIN.colors = m.comboColors || [];

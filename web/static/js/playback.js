@@ -2,6 +2,7 @@
    audio sync and the main requestAnimationFrame loop (`tick`). */
 
 import { $, S, OPT, clamp, upperBound, frameIndexAt } from "./core.js";
+import { api } from "./api.js";
 import { ICONS } from "./config.js";
 import { draw } from "./render.js";
 import { drawStats, updateHUD } from "./stats.js";
@@ -16,9 +17,8 @@ export function initSfx() {
     S.sfxGain = S.actx.createGain();
     S.sfxGain.gain.value = OPT.sfxVol / 100;
     S.sfxGain.connect(S.actx.destination);
-    fetch("/api/hitsound")
-      .then(r => r.ok ? r.arrayBuffer() : Promise.reject())
-      .then(b => S.actx.decodeAudioData(b))
+    api.getHitsound()
+      .then(b => b ? S.actx.decodeAudioData(b) : Promise.reject())
       .then(buf => { S.hitBuf = buf; })
       .catch(() => {});
   } catch (e) {}
