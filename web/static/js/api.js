@@ -76,8 +76,16 @@ async function bootPyodide(onStatus) {
 
   onStatus && onStatus("Installing replay parser…");
   await py.loadPackage("micropip");
-  const micropip = py.pyimport("micropip");
-  await micropip.install("osrparse");
+  // Install + verify osrparse through Python's own event loop. Awaiting the
+  // coroutine via `await micropip.install(...)` from JS doesn't reliably
+  // suspend, so webcore could import (and replay.py do `import osrparse`)
+  // before the install finished — leaving osrparse unimportable. runPythonAsync
+  // awaits properly and the trailing `import osrparse` surfaces real failures.
+  await py.runPythonAsync(
+    "import micropip\n" +
+    "await micropip.install('osrparse')\n" +
+    "import osrparse\n"
+  );
 
   onStatus && onStatus("Loading viewer core…");
   for (const rel of PY_FILES) {
