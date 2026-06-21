@@ -75,7 +75,9 @@ async function bootPyodide(onStatus) {
   const py = await window.loadPyodide();
 
   onStatus && onStatus("Installing replay parser…");
-  await py.loadPackage("micropip");
+  // `lzma` is unvendored from Pyodide's stdlib and must be loaded explicitly —
+  // osrparse uses it to decompress the replay's cursor data.
+  await py.loadPackage(["micropip", "lzma"]);
   // Install + verify osrparse through Python's own event loop. Awaiting the
   // coroutine via `await micropip.install(...)` from JS doesn't reliably
   // suspend, so webcore could import (and replay.py do `import osrparse`)
