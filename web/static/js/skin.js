@@ -177,7 +177,7 @@ export function resetSkin() {
   for (const k of Object.keys(SKIN)) delete SKIN[k];
   Object.assign(SKIN, {
     present: false, name: "", author: "", source: "", el: {}, digits: [],
-    colors: [], sliderBorder: null, sliderTrack: null, sliderBall: null,
+    colors: [], sliderBorder: null, sliderTrack: null, sliderBall: null, hitsound: null,
     ini: parseIni(""), palette: COMBO_COLORS,
   });
   tintCache.clear();
@@ -207,6 +207,14 @@ export async function loadSkinBuffer(buf, fallbackName, source) {
   const numPrefix = ini.hitCirclePrefix.endsWith("/") ? ini.hitCirclePrefix : ini.hitCirclePrefix + "-";
   const digits = await Promise.all([...Array(10).keys()].map(d => loadImage(files, prefix, numPrefix + d)));
 
+  // The skin's own hit sound (normal-hitnormal); blank/near-empty files are ignored.
+  let hitsound = null;
+  for (const ext of ["wav", "ogg", "mp3"]) {
+    const f = files.get((prefix + "normal-hitnormal." + ext).toLowerCase());
+    if (!f) continue;
+    try { const b = await f.read(); if (b.byteLength > 2048) { hitsound = b.slice().buffer; break; } } catch (e) {}
+  }
+
   const usable = Object.values(el).some(e => e && !e.hidden);
   if (!usable && !iniKey) throw new Error("no skin elements found in this file");
 
@@ -223,6 +231,7 @@ export async function loadSkinBuffer(buf, fallbackName, source) {
   SKIN.sliderBorder = ini.sliderBorder;
   SKIN.sliderTrack = ini.sliderTrack;
   SKIN.sliderBall = ini.sliderBall;
+  SKIN.hitsound = hitsound;
   return SKIN;
 }
 

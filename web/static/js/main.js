@@ -48,7 +48,7 @@ $("file-skin").onchange = e => { const f = e.target.files[0]; e.target.value = "
 async function dropSkin() {
   await removeSkin();
   toast(SKIN.present ? `Back to the project skin: ${SKIN.name}` : "Skin removed — using the built-in style.", "ok");
-  renderSkin();
+  document.dispatchEvent(new CustomEvent("skinchange"));
 }
 $("btn-skin-remove").onclick = dropSkin;
 $("btn-skin-remove-2").onclick = dropSkin;
@@ -195,7 +195,7 @@ document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.d
 
 // A reload must start from a clean slate (the local server keeps its session).
 clearSession();
-loadSkin().then(renderSkin);
+loadSkin().then(() => document.dispatchEvent(new CustomEvent("skinchange")));
 renderSkin();
 bindSettings();
 applySettings();

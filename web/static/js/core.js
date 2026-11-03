@@ -79,7 +79,7 @@ export const S = {
   events:  [null, null],
   map: null,
   audio: null, audioBlocked: false,
-  actx: null, hitBuf: null, sfxGain: null,
+  actx: null, hitBuf: null, skinHitBuf: null, sfxGain: null,
   started: false, playing: false,
   t: 0, lastNow: 0, speed: 1,
   origin: 0, endT: 1,

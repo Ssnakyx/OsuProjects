@@ -45,7 +45,7 @@ export const DEFAULTS = {
   showApproach: true, showBorder: true, showNumbers: true, snaking: true,
   followPoints: true, hiddenFx: true, useSkin: true,
   showUR: true, showPP: true, showFps: false, bgParticles: true,
-  musicVol: 70, sfxVol: 80,
+  musicVol: 60, sfxVol: 90,
 };
 export const OPT_UNIT = { bgDim: "%", bgBlur: "px", cursorScale: "%", trail: "%" };
 

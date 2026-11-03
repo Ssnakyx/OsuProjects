@@ -14,6 +14,7 @@ const PATCH_NOTES = [
       { tag: "added", items: [
         "<b>Skins work everywhere</b>, including the online version: drop an <b>.osk</b> (or use the Skin button) and it is remembered in your browser. Remove it any time from Settings.",
         "Much fuller skin support: hit circle numbers, slider start/end circles, slider ball, follow circle, reverse arrows, follow points, judgments (300/100/50/miss), cursor rotation/expand, smooth cursor trail and spinners. Elements a skin hides (1×1 images) stay hidden.",
+        "Hit sounds use your skin's own <code>normal-hitnormal</code> when it has one; the default hit sound is much louder.",
         "<b>Note stacking</b> like osu!, <b>follow points</b>, <b>reverse arrows</b> on repeat sliders and the <b>Hidden</b> fade-out.",
       ]},
       { tag: "changed", items: [
