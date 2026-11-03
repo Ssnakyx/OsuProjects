@@ -35,7 +35,8 @@ python main.py                   # desktop version
 
 - **Just drop replays** — the beatmap (`.osz`) is found by MD5 and downloaded automatically, then cached in `~/.osu-replay-viewer/maps`
 - **1 or 2 replays** — watch a single play, or compare two cursors **overlaid** or **side-by-side**
-- **Skin support** — drop a `.osk` in the project folder and it's used automatically: cursor, hit circles, approach circles, follow circle, combo & slider colours from `skin.ini`
+- **Skin support** — drop any `.osk` on the page (or use the **Skin** button). It's unpacked in your browser, remembered for next time, and works on the online/static version too. Hit circles & numbers, slider balls, follow circles, reverse arrows, follow points, judgments, cursor + trail, spinners and `skin.ini` colours are all used. A `.osk` in the project folder is still picked up by the local server and the desktop app.
+- **osu!-accurate playfield** — note stacking, follow points, reverse arrows, Hidden fade-out, HR flip
 - **Start button** — files load first, playback starts when *you* click ▶
 - **Live scoring** — score, combo, accuracy and 100/50/miss counts simulated with osu!-stable hit windows
 - **Hit judgments** — 100 / 50 / ✕ popups on the playfield
@@ -123,6 +124,7 @@ OsuProjects/
 │   ├── scoring.py        Hit detection → score/combo/acc/judgment timeline
 │   ├── mods.py           Mod bitmask helpers (HR/EZ/DT/HT windows & stats)
 │   ├── mirror.py         Beatmap auto-download (osu.direct, catboy, nerinyan)
+│   ├── webjson.py        JSON for the browser (shared by server.py and Pyodide)
 │   ├── skin.py           .osk skin loader (cursor, circles, colours)
 │   ├── config.py         Colours & constants
 │   └── renderer.py       Desktop UI (pygame)
@@ -143,7 +145,16 @@ OsuProjects/
 
 **Replays look misaligned** — make sure both replays are for the same difficulty; a warning is shown if their MD5 differ.
 
-**Scoring isn't exact** — it's a close approximation (no note-lock, slider ticks, or spinner scoring).
+**Scoring isn't exact** — it follows osu!stable for circles and slider heads (note lock, early-click misses, stacking) but ignores slider ticks/ends and spinners, so totals are an approximation.
+
+---
+
+## 🧪 Tests
+
+```bash
+pip install pytest
+python -m pytest tests          # parsing, stacking, scoring, web JSON
+```
 
 ---
 

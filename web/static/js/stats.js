@@ -1,7 +1,7 @@
 /* Scoreboard read-outs: unstable rate, rough pp, the hit-distribution
    histogram panel, and the top HUD per-frame update. */
 
-import { $, S, OPT, clamp, rgba, upperBound, adjDifficulty, fmtTime } from "./core.js";
+import { $, S, OPT, clamp, rgba, upperBound, adjDifficulty, fmtTime, escapeHtml, clockRate } from "./core.js";
 import { PLAYER_COLORS, JUDGE_COLORS } from "./config.js";
 
 /* ── precomputed cumulative sums (for unstable rate) ───────────────── */
@@ -28,7 +28,8 @@ export function urAt(slot, t) {
   if (n < 2) return 0;
   const mean = ed.cS[idx] / n;
   const variance = ed.cQ[idx] / n - mean * mean;
-  return Math.sqrt(Math.max(0, variance)) * 10;
+  // hit errors are in song time; UR is quoted in real time (÷ DT/HT rate)
+  return Math.sqrt(Math.max(0, variance)) * 10 / clockRate(S.replays[slot] ? S.replays[slot].mods : 0);
 }
 
 /* Deliberately a rough proxy — not official pp (needs full star-rating). */
@@ -179,7 +180,7 @@ export function drawStats() {
     const evs = S.events[slot].events;
     const i = upperBound(evs, S.t) - 1;
     const ev = i >= 0 ? evs[i] : null;
-    const name = S.replays[slot].player;
+    const name = escapeHtml(S.replays[slot].player);
     rows.push(`<div class="stats-row"><span style="color:${rgba(PLAYER_COLORS[slot], 1)}">${name}</span><span></span></div>`);
     if (ev) {
       rows.push(`<div class="stats-row"><span>300 / 100 / 50 / ✕</span><span>${ev[8]} / ${ev[9]} / ${ev[10]} / ${ev[11]}</span></div>`);

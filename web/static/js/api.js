@@ -20,7 +20,7 @@ const STATIC_BASE = new URL("../", import.meta.url);
 // deploy these must sit next to index.html (see web/build_static.py).
 const PY_FILES = [
   "src/__init__.py", "src/mods.py", "src/curves.py",
-  "src/beatmap.py", "src/replay.py", "src/scoring.py",
+  "src/beatmap.py", "src/replay.py", "src/scoring.py", "src/webjson.py",
   "webcore.py",
 ];
 
@@ -178,15 +178,17 @@ async function mirrorDownload(md5, onStatus) {
 /* ── public API ────────────────────────────────────────────────────── */
 
 export const api = {
-  async postReplay(buf) {
+  // `slot` is chosen by the UI (0 or 1) so a stale server session can never
+  // push the first replay into the second slot.
+  async postReplay(buf, slot = "auto") {
     if (await mode() === "server") {
-      const res = await fetch("/api/replay?slot=auto", { method: "POST", body: buf });
+      const res = await fetch("/api/replay?slot=" + slot, { method: "POST", body: buf });
       if (!res.ok) throw new Error(await errMsg(res));
       return res.json();
     }
     await ensurePy();
     writeFile("/work/in.osr", buf);
-    return wcJson("load_replay_path", "/work/in.osr", "auto");
+    return wcJson("load_replay_path", "/work/in.osr", String(slot));
   },
 
   async uploadMap(name, buf) {

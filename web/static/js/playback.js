@@ -95,6 +95,8 @@ function fireHitSounds() {
 /* ── frame loop ────────────────────────────────────────────────────── */
 
 export function tick(now) {
+  // schedule first: an exception while drawing must never stop the loop
+  requestAnimationFrame(tick);
   const dt = now - S.lastNow;
   if (S.playing && !S.seeking) {
     S.t += dt * S.speed;
@@ -118,8 +120,9 @@ export function tick(now) {
     if (S.fpsAcc >= 500) { S.fps = Math.round(1000 * S.fpsN / S.fpsAcc); S.fpsAcc = 0; S.fpsN = 0; $("fps").textContent = S.fps + " fps"; }
   }
 
-  draw();
-  updateHUD();
-  if (!$("stats-panel").classList.contains("hidden")) drawStats();
-  requestAnimationFrame(tick);
+  try {
+    draw();
+    updateHUD();
+    if (!$("stats-panel").classList.contains("hidden")) drawStats();
+  } catch (e) { console.error(e); }
 }

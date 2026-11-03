@@ -8,7 +8,6 @@ Run with:  python main.py --web
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
@@ -18,7 +17,6 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import List, Optional
 
@@ -27,13 +25,10 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from src import mirror
-from src import mods as mods_mod
-from src import skin as skin_mod
-from src.beatmap import load_beatmap, build_combo_info
+from src import webjson
+from src.beatmap import load_beatmap
 from src.replay import load_replay, Replay
-from src.scoring import compute_live_scores
-
-SKIN = skin_mod.load_default(ROOT)
+from src.skin import find_default_osk
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
@@ -51,10 +46,9 @@ _CTYPES = {
     ".png":  "image/png",
     ".svg":  "image/svg+xml",
     ".ico":  "image/x-icon",
+    ".py":   "text/plain; charset=utf-8",
+    ".osk":  "application/zip",
 }
-
-# Combo colour palette mirrored in the frontend
-N_COMBO_COLORS = 6
 
 
 class Session:
@@ -92,30 +86,13 @@ S = Session()
 
 
 # ---------------------------------------------------------------------------
-# Beatmap handling
+# Beatmap handling (JSON shapes live in src/webjson.py, shared with Pyodide)
 # ---------------------------------------------------------------------------
-
-def _md5_of(path: str) -> str:
-    h = hashlib.md5()
-    with open(path, "rb") as f:
-        h.update(f.read())
-    return h.hexdigest()
-
 
 def _ingest_osz(path: str) -> int:
     """Extract an .osz, register candidate .osu files. Returns diff count."""
     new_dir = tempfile.mkdtemp(prefix="osu_rv_map_")
-    osu_paths: List[str] = []
-    with zipfile.ZipFile(path, "r") as zf:
-        for name in zf.namelist():
-            if os.path.splitext(name)[1].lower() in _VIDEO_EXTS:
-                continue
-            zf.extract(name, new_dir)
-            if name.lower().endswith(".osu"):
-                osu_paths.append(os.path.join(new_dir, name))
-    if not osu_paths:
-        shutil.rmtree(new_dir, ignore_errors=True)
-        raise ValueError("No .osu file inside the .osz archive.")
+    osu_paths = webjson.extract_osz(path, new_dir)
     if S.extract_dir and os.path.isdir(S.extract_dir):
         shutil.rmtree(S.extract_dir, ignore_errors=True)
     S.extract_dir = new_dir
@@ -126,108 +103,36 @@ def _ingest_osz(path: str) -> int:
 
 
 def _resolve_beatmap() -> None:
-    """Pick the candidate matching replay 1's MD5 (else first) and parse it."""
-    if not S.candidates:
-        return
-    target = S.replays[0].beatmap_md5 if S.replays[0] else None
-    pick = None
-    if target:
-        pick = next((p for p in S.candidates if _md5_of(p) == target), None)
-    pick = pick or S.candidates[0]
-    if pick != S.beatmap_path or S.beatmap is None:
+    """Pick the candidate matching the replays' MD5 (else first) and parse it."""
+    target = _target_md5()
+    pick = webjson.pick_candidate(S.candidates, target)
+    if pick and (pick != S.beatmap_path or S.beatmap is None):
         S.beatmap_path = pick
         S.beatmap = load_beatmap(pick)
 
 
+def _target_md5() -> Optional[str]:
+    for r in S.replays:
+        if r is not None and r.beatmap_md5:
+            return r.beatmap_md5
+    return None
+
+
 def _media_paths() -> dict:
-    out = {"audio": None, "bg": None}
-    if not (S.beatmap and S.beatmap_path):
-        return out
-    base = os.path.dirname(S.beatmap_path)
-    if S.beatmap.audio_filename:
-        p = os.path.join(base, S.beatmap.audio_filename)
-        if os.path.isfile(p):
-            out["audio"] = p
-    if S.beatmap.background:
-        p = os.path.join(base, S.beatmap.background)
-        if os.path.isfile(p):
-            out["bg"] = p
-    return out
+    return webjson.media_paths(S.beatmap, S.beatmap_path)
 
 
 def _map_json() -> dict:
-    bm = S.beatmap
-    assert bm is not None
-    n_colors = (len(SKIN.combo_colors)
-                if SKIN and SKIN.combo_colors else N_COMBO_COLORS)
-    idxs, nums = build_combo_info(bm, n_colors)
-    objs = []
-    for i, o in enumerate(bm.hit_objects):
-        d = {"t": o.time, "x": o.x, "y": o.y, "ci": idxs[i], "cn": nums[i]}
-        if o.is_slider:
-            pts = o.path
-            if len(pts) > 64:
-                step = (len(pts) - 1) / 63.0
-                pts = [pts[round(k * step)] for k in range(64)]
-            d["k"] = "s"
-            d["path"] = [[round(px, 1), round(py, 1)] for px, py in pts]
-            d["slides"] = o.slides
-            d["dur"] = round(o.duration, 1)
-        elif o.is_spinner:
-            d["k"] = "p"
-            d["end"] = o.end_time
-        else:
-            d["k"] = "c"
-        objs.append(d)
-
+    assert S.beatmap is not None and S.beatmap_path
+    d = webjson.map_json(S.beatmap, S.beatmap_path, len(S.candidates), _target_md5())
     media = _media_paths()
-    md5 = _md5_of(S.beatmap_path) if S.beatmap_path else ""
-    target = S.replays[0].beatmap_md5 if S.replays[0] else None
     # Cache-bust the media URLs per map: they are served with a long
     # max-age, and the path is constant, so without a unique token the
     # browser would replay the *previous* map's cached audio/background.
-    v = md5 or str(int(time.time()))
-    return {
-        "title": bm.title, "artist": bm.artist, "version": bm.version,
-        "creator": bm.creator, "setId": bm.beatmapset_id,
-        "cs": bm.cs, "ar": bm.ar, "od": bm.od,
-        "audio": (f"/api/media/audio?v={v}" if media["audio"] else None),
-        "bg": (f"/api/media/bg?v={v}" if media["bg"] else None),
-        "diffCount": len(S.candidates),
-        "md5Match": (target is None or md5 == target),
-        "objects": objs,
-    }
-
-
-def _replay_json(slot: int) -> dict:
-    r = S.replays[slot]
-    assert r is not None
-    return {
-        "slot": slot,
-        "player": r.player_name,
-        "mods": r.mods,
-        "modsStr": mods_mod.mods_string(r.mods),
-        "md5": r.beatmap_md5,
-        "frames": [[round(f.time, 1), round(f.x, 2), round(f.y, 2), f.keys]
-                   for f in r.frames],
-    }
-
-
-def _events_json(slot: int) -> dict:
-    r = S.replays[slot]
-    if r is None or S.beatmap is None:
-        raise ValueError("replay or beatmap missing")
-    evs = compute_live_scores(r, S.beatmap)
-    out = []
-    for e in evs[1:]:   # skip the -inf sentinel
-        out.append([round(e.time, 1), e.score, e.combo, round(e.acc, 2),
-                    e.judgment, round(e.x, 1), round(e.y, 1), round(e.dt, 1),
-                    e.n300, e.n100, e.n50, e.nmiss])
-    cs, ar, od = mods_mod.adjusted_difficulty(
-        S.beatmap.cs, S.beatmap.ar, S.beatmap.od, r.mods)
-    w300, w100, w50 = mods_mod.hit_windows(od, r.mods)
-    return {"slot": slot, "events": out,
-            "windows": [round(w300, 1), round(w100, 1), round(w50, 1)]}
+    v = d["md5"] or str(int(time.time()))
+    d["audio"] = f"/api/media/audio?v={v}" if media["audio"] else None
+    d["bg"] = f"/api/media/bg?v={v}" if media["bg"] else None
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
                     if S.beatmap is None:
                         self._error("no beatmap loaded", 404)
                         return
-                    self._json(_events_json(slot))
+                    self._json(webjson.events_json(S.replays[slot], S.beatmap, slot))
             elif path == "/api/media/audio":
                 p = _media_paths()["audio"]
                 if p:
@@ -382,31 +287,18 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/hitsound":
                 self._file(os.path.join(ROOT, "osu-hit-sound.mp3"), cache=True)
             elif path == "/api/skin":
-                if SKIN is None:
-                    self._json({"present": False})
+                # The browser unpacks the skin itself (same code as the static
+                # build); we only offer the .osk sitting in the project folder.
+                osk = find_default_osk(ROOT)
+                self._json({"present": bool(osk),
+                            "name": os.path.splitext(os.path.basename(osk))[0] if osk else "",
+                            "url": "/api/skin/osk" if osk else None})
+            elif path == "/api/skin/osk":
+                osk = find_default_osk(ROOT)
+                if osk:
+                    self._file(osk, cache=False)
                 else:
-                    self._json({
-                        "present": True,
-                        "name": SKIN.name,
-                        "comboColors": SKIN.combo_colors,
-                        "sliderBorder": SKIN.slider_border,
-                        "sliderTrack": SKIN.slider_track,
-                        "elements": {
-                            name: {
-                                "url": f"/api/skin/el/{name}",
-                                "scale": SKIN.scales.get(name, 1),
-                                "w": SKIN.sizes.get(name, (0, 0))[0],
-                                "h": SKIN.sizes.get(name, (0, 0))[1],
-                            }
-                            for name in SKIN.elements
-                        },
-                    })
-            elif path.startswith("/api/skin/el/"):
-                name = path[len("/api/skin/el/"):]
-                if SKIN and name in SKIN.elements:
-                    self._file(SKIN.elements[name], cache=True)
-                else:
-                    self._error("no such element", 404)
+                    self._error("no skin", 404)
             else:
                 self._error("not found", 404)
         except (BrokenPipeError, ConnectionResetError):
@@ -463,7 +355,9 @@ class Handler(BaseHTTPRequestHandler):
                         f.write(data)
                     S.replays[slot] = load_replay(tmp_path)
                     S.replay_paths[slot] = tmp_path
-                    self._json(_replay_json(slot))
+                    if S.candidates:
+                        _resolve_beatmap()
+                    self._json(webjson.replay_json(S.replays[slot], slot))
             elif path == "/api/mapfile":
                 data = self._body()
                 name = self.headers.get("X-Filename", "map.osz")

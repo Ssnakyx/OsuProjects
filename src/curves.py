@@ -184,6 +184,14 @@ def _trim(path: List[Point], length: float) -> List[Point]:
             return result
         acc += d
         result.append(path[i])
+    # Path shorter than the declared length: osu! extends the last segment
+    # in a straight line until the length is reached.
+    if acc < length - 1e-6:
+        a, b = path[-2], path[-1]
+        d = _dist(a, b)
+        if d > 1e-8:
+            k = (length - acc) / d
+            result.append((b[0] + (b[0] - a[0]) * k, b[1] + (b[1] - a[1]) * k))
     return result
 
 

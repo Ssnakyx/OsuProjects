@@ -18,7 +18,9 @@ from . import config
 from . import mirror
 from . import mods as mods_mod
 from . import skin as skin_mod
-from .beatmap  import load_beatmap, Beatmap, Circle, Slider, Spinner, build_combo_info
+from .beatmap  import (load_beatmap, Beatmap, Circle, Slider, Spinner, build_combo_info,
+                       compute_stack_heights, stack_offset)
+from .webjson  import find_file_ci
 from .replay   import load_replay, Replay, cursor_at, keys_at
 from .curves   import path_at_t
 from .scoring  import (ScoreEvent, compute_live_scores, state_at,
@@ -340,6 +342,7 @@ class Renderer:
         return h.hexdigest()
 
     def _load(self) -> None:
+        self.error_msg = ""
         try:
             if not self.osu_path and self._candidate_osu_paths:
                 target = self.replays[0].beatmap_md5
@@ -368,6 +371,9 @@ class Renderer:
             self._score_events = [
                 compute_live_scores(r, self.beatmap) for r in self.replays
             ]
+            # Scoring stacked its own copy of the positions; now shift the
+            # objects themselves so the drawn map matches (P1's CS/AR/HR).
+            self._apply_stacking(mods0)
 
             # Hit-sound timeline from P1's actual hits (judgment > 0).
             self._hit_sound_times = sorted(
@@ -401,6 +407,20 @@ class Renderer:
             self.error_msg = f"Load error: {exc}"
             self.state = "WAITING"
 
+    def _apply_stacking(self, mods: int) -> None:
+        bm = self.beatmap
+        assert bm is not None
+        heights = compute_stack_heights(bm, self.render_preempt)
+        hard_rock = bool(mods & mods_mod.HR)
+        for obj, h in zip(bm.hit_objects, heights):
+            if not h:
+                continue
+            dx, dy = stack_offset(h, self.render_radius, hard_rock)
+            obj.x += dx
+            obj.y += dy
+            if obj.is_slider and getattr(obj, "path", None):
+                obj.path = [(px + dx, py + dy) for px, py in obj.path]
+
     def reset(self) -> None:
         """Back to the waiting screen, dropping all loaded files."""
         self._audio_stop()
@@ -431,8 +451,8 @@ class Renderer:
         bg = self.beatmap.background
         if not bg or os.path.splitext(bg)[1].lower() not in _IMAGE_EXTS:
             return
-        path = os.path.join(os.path.dirname(self.osu_path), bg)
-        if not os.path.isfile(path):
+        path = find_file_ci(os.path.dirname(self.osu_path), bg)
+        if not path:
             return
         try:
             self._bg_raw = pygame.image.load(path).convert()
@@ -472,8 +492,8 @@ class Renderer:
         if not self.beatmap or not self.beatmap.audio_filename:
             return
         osu_dir    = os.path.dirname(self.osu_path or "")
-        audio_path = os.path.join(osu_dir, self.beatmap.audio_filename)
-        if not os.path.isfile(audio_path):
+        audio_path = find_file_ci(osu_dir, self.beatmap.audio_filename)
+        if not audio_path:
             return
         try:
             pygame.mixer.music.load(audio_path)

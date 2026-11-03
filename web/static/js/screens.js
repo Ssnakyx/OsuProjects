@@ -9,6 +9,30 @@ import { triLayer } from "./landing-fx.js";
 
 const PATCH_NOTES = [
   {
+    ver: "3.0", name: "Skins everywhere & a new look", date: "2026-11-03",
+    changes: [
+      { tag: "added", items: [
+        "<b>Skins work everywhere</b>, including the online version: drop an <b>.osk</b> (or use the Skin button) and it is remembered in your browser. Remove it any time from Settings.",
+        "Much fuller skin support: hit circle numbers, slider start/end circles, slider ball, follow circle, reverse arrows, follow points, judgments (300/100/50/miss), cursor rotation/expand, smooth cursor trail and spinners. Elements a skin hides (1×1 images) stay hidden.",
+        "<b>Note stacking</b> like osu!, <b>follow points</b>, <b>reverse arrows</b> on repeat sliders and the <b>Hidden</b> fade-out.",
+      ]},
+      { tag: "changed", items: [
+        "New design: darker \"night session\" theme, Space Grotesk + Inter, a two-column menu with a slot for every file.",
+        "Scoring is closer to osu!stable: note lock, too-early clicks count as misses, exact circle size and stacked positions.",
+        "Snaking sliders are on by default.",
+      ]},
+      { tag: "fixed", items: [
+        "Sliders disappeared 200 ms after they started instead of staying until the end.",
+        "Beatmaps whose audio/background name differs in case (e.g. <code>Audio.MP3</code>) played silently with no background online.",
+        "After reloading the page, the first replay could land in the Replay 2 slot.",
+        "Clicking the progress bar without dragging could freeze playback.",
+        "Space / arrows on the menu kept controlling the hidden player (the old song resumed in the background).",
+        "Wrong slider lengths on maps with green lines on the same ms as a red line, or extreme slider velocity.",
+        "UR under DT/HT is now shown in real time.",
+      ]},
+    ],
+  },
+  {
     ver: "2.2", name: "Results, polish & cleanup", date: "2026-06-20",
     changes: [
       { tag: "added", items: [

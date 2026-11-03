@@ -1,17 +1,14 @@
 /* Shared constants, colour palettes and default settings. */
 
 export const COMBO_COLORS = [
-  [255, 160, 55], [60, 210, 90], [60, 148, 255],
-  [255, 60, 90], [175, 60, 218], [255, 218, 50],
+  [255, 102, 170], [92, 200, 255], [255, 196, 64], [126, 230, 150],
 ];
-export const PLAYER_COLORS = [[255, 102, 170], [100, 174, 255]];
-export const JUDGE_COLORS = { 300: [80, 170, 255], 100: [90, 220, 110], 50: [255, 175, 70], 0: [255, 70, 90] };
+export const PLAYER_COLORS = [[255, 95, 162], [76, 201, 255]];
+export const JUDGE_COLORS = { 300: [92, 200, 255], 100: [62, 224, 143], 50: [255, 207, 74], 0: [255, 84, 104] };
 
-export const HIT_LINGER = 200;
 export const JUDGE_POPUP_MS = 650;
 export const ERRORBAR_MS = 4000;
 export const SPEED_OPTS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-export const CURSOR_SKIN_SCALE = 0.6;
 
 export const MOD = { NF: 1, EZ: 2, HD: 8, HR: 16, DT: 64, HT: 256, NC: 512, FL: 1024 };
 
@@ -32,12 +29,12 @@ export const ICONS = {
 };
 
 export const ACCENTS = {
-  pink:   { main: "#ff66aa", dark: "#c94e85", glow: "rgba(255,102,170,.45)", soft: "rgba(255,102,170,.14)" },
-  blue:   { main: "#5b9dff", dark: "#3f6fd1", glow: "rgba(91,157,255,.45)",  soft: "rgba(91,157,255,.14)" },
-  green:  { main: "#54e08a", dark: "#33b069", glow: "rgba(84,224,138,.42)",  soft: "rgba(84,224,138,.14)" },
-  purple: { main: "#b06bff", dark: "#8a44e0", glow: "rgba(176,107,255,.45)", soft: "rgba(176,107,255,.14)" },
-  orange: { main: "#ff9a3c", dark: "#e0741a", glow: "rgba(255,154,60,.42)",  soft: "rgba(255,154,60,.14)" },
-  red:    { main: "#ff5b6b", dark: "#d13b4b", glow: "rgba(255,91,107,.45)",  soft: "rgba(255,91,107,.14)" },
+  pink:   { main: "#ff5fa2", dark: "#d9437f", glow: "rgba(255,95,162,.38)",  soft: "rgba(255,95,162,.13)" },
+  blue:   { main: "#5b8cff", dark: "#3f69d6", glow: "rgba(91,140,255,.38)",  soft: "rgba(91,140,255,.13)" },
+  green:  { main: "#3ee08f", dark: "#22b56d", glow: "rgba(62,224,143,.36)",  soft: "rgba(62,224,143,.12)" },
+  purple: { main: "#a77bff", dark: "#8257e0", glow: "rgba(167,123,255,.38)", soft: "rgba(167,123,255,.13)" },
+  orange: { main: "#ff9b42", dark: "#e07722", glow: "rgba(255,155,66,.36)",  soft: "rgba(255,155,66,.12)" },
+  red:    { main: "#ff5468", dark: "#d63a4d", glow: "rgba(255,84,104,.38)",  soft: "rgba(255,84,104,.13)" },
 };
 
 export const DEFAULTS = {
@@ -45,7 +42,8 @@ export const DEFAULTS = {
   bgDim: 78, bgBlur: 4,
   cursorScale: 100, trail: 100,
   showKeys: true, showErrorBar: true, showJudgments: true, show300: false,
-  showApproach: true, showBorder: true, showNumbers: true, snaking: false,
+  showApproach: true, showBorder: true, showNumbers: true, snaking: true,
+  followPoints: true, hiddenFx: true, useSkin: true,
   showUR: true, showPP: true, showFps: false, bgParticles: true,
   musicVol: 70, sfxVol: 80,
 };
@@ -53,4 +51,4 @@ export const OPT_UNIT = { bgDim: "%", bgBlur: "px", cursorScale: "%", trail: "%"
 
 // Bump APP_VERSION whenever a release is added to the top of PATCH_NOTES;
 // the "what's new" modal then auto-opens once for returning visitors.
-export const APP_VERSION = "2.2";
+export const APP_VERSION = "3.0";

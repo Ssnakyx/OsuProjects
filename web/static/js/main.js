@@ -2,9 +2,9 @@
    and boots the app. Loaded as a module, so it runs after the DOM is ready. */
 
 import { SPEED_OPTS, APP_VERSION, ICONS } from "./config.js";
-import { $, S, OPT, toast, landing, canvas, saveSettings, resetOptions } from "./core.js";
-import { loadSkin } from "./skin.js";
-import { handleFiles, clearSession, goLanding, enterPlayer, maybeStart } from "./session.js";
+import { $, S, OPT, SKIN, toast, chip, landing, player, canvas, saveSettings, resetOptions } from "./core.js";
+import { loadSkin, removeSkin } from "./skin.js";
+import { handleFiles, clearSession, goLanding, enterPlayer, loadSkinFile } from "./session.js";
 import { setPlaying, seekTo, setSpeed, stepFrame, skipIntro, syncAudio } from "./playback.js";
 import {
   openSettings, closeSettings, bindSettings, applySettings,
@@ -12,7 +12,6 @@ import {
 } from "./settings.js";
 import { openPatch, closePatch, closeResults } from "./screens.js";
 import { openDB, getRecent, renderRecent, clearRecent } from "./recent.js";
-import { startLandingFx, sizeLandingFx } from "./landing-fx.js";
 
 /* ── small view toggles ────────────────────────────────────────────── */
 
@@ -38,11 +37,33 @@ window.addEventListener("drop", e => {
 
 $("btn-replays").onclick = () => $("file-replays").click();
 $("btn-map").onclick = () => $("file-map").click();
-// The cookie logo: start if a replay is ready, otherwise open the file picker.
-$("osu-cookie").onclick = () =>
-  $("btn-watch").classList.contains("disabled") ? $("file-replays").click() : enterPlayer();
+$("btn-skin").onclick = () => $("file-skin").click();
+$("btn-skin-2").onclick = () => $("file-skin").click();
 $("file-replays").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
 $("file-map").onchange = e => { handleFiles([...e.target.files]); e.target.value = ""; };
+$("file-skin").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadSkinFile(f); };
+
+/* ── skin status (landing chip + settings row) ─────────────────────── */
+
+async function dropSkin() {
+  await removeSkin();
+  toast(SKIN.present ? `Back to the project skin: ${SKIN.name}` : "Skin removed — using the built-in style.", "ok");
+  renderSkin();
+}
+$("btn-skin-remove").onclick = dropSkin;
+$("btn-skin-remove-2").onclick = dropSkin;
+
+function renderSkin() {
+  const user = SKIN.present && SKIN.source === "user";
+  if (SKIN.present) chip("chip-skin", SKIN.name + (SKIN.author ? `  ·  by ${SKIN.author}` : ""), "ok");
+  else chip("chip-skin", "built-in · drop an .osk to use yours");
+  $("skin-name").textContent = SKIN.present ? SKIN.name : "Built-in";
+  $("skin-src").textContent = !SKIN.present ? "vector style, no skin loaded"
+    : user ? "your skin · saved in this browser" : "from the project folder";
+  $("btn-skin-remove").classList.toggle("hidden", !user);
+  $("btn-skin-remove-2").classList.toggle("hidden", !user);
+}
+document.addEventListener("skinchange", renderSkin);
 
 $("btn-clear").onclick = async () => { await clearSession(); toast("Session cleared.", "ok"); };
 $("btn-recent-clear").onclick = async () => { await clearRecent(); toast("Recent replays cleared.", "ok"); };
@@ -93,19 +114,26 @@ $("vol-sfx").oninput = e => { OPT.sfxVol = +e.target.value; if (S.sfxGain) S.sfx
 /* ── seek bar ──────────────────────────────────────────────────────── */
 
 const seekEl = $("seek");
+const seekValue = () => S.origin + (seekEl.value / 1000) * (S.endT - S.origin);
 seekEl.addEventListener("pointerdown", () => { S.seeking = true; });
-seekEl.addEventListener("input", () => { S.t = S.origin + (seekEl.value / 1000) * (S.endT - S.origin); });
-seekEl.addEventListener("change", () => { S.seeking = false; seekTo(S.t); });
+seekEl.addEventListener("input", () => { S.t = seekValue(); });
+// A plain click doesn't always fire "change" — end the drag on pointerup too,
+// otherwise playback stayed frozen with S.seeking stuck at true.
+const endSeek = () => { if (!S.seeking) return; S.seeking = false; seekTo(seekValue()); };
+seekEl.addEventListener("change", endSeek);
+window.addEventListener("pointerup", endSeek);
+window.addEventListener("pointercancel", endSeek);
 
 /* click canvas to pause/resume (nice on touch) */
-canvas.addEventListener("click", () => { if (S.started) setPlaying(!S.playing); });
+canvas.addEventListener("click", () => { if (inPlayer()) setPlaying(!S.playing); });
+const inPlayer = () => S.started && !player.classList.contains("hidden");
 
 document.addEventListener("click", () => {
   if (S.audioBlocked && S.playing) syncAudio(true);
   if (S.actx && S.actx.state === "suspended") S.actx.resume();
 });
 
-window.addEventListener("resize", () => { sizeParticles(); sizeLandingFx(); });
+window.addEventListener("resize", () => { sizeParticles(); });
 
 /* ── keyboard ──────────────────────────────────────────────────────── */
 
@@ -116,7 +144,13 @@ document.addEventListener("keydown", e => {
   if (!$("settings-modal").classList.contains("hidden")) { if (e.code === "Escape") closeSettings(); return; }
   if (!$("patch-modal").classList.contains("hidden")) { if (e.code === "Escape") closePatch(); return; }
   if (!$("results-modal").classList.contains("hidden")) { if (e.code === "Escape") closeResults(); return; }
-  if (!S.started) { if (e.code === "Escape" && S.map) maybeStart(); return; }
+  if (!$("help-modal").classList.contains("hidden") && e.code === "Escape") { $("help-modal").classList.add("hidden"); return; }
+  // On the menu, only Enter (start) is live — playback keys must not drive
+  // a hidden player (Space used to resume the previous song invisibly).
+  if (!inPlayer()) {
+    if (e.code === "Enter" && !$("btn-watch").classList.contains("disabled") && e.target.tagName !== "BUTTON") enterPlayer();
+    return;
+  }
   switch (e.code) {
     case "Space": e.preventDefault(); setPlaying(!S.playing); break;
     case "KeyR": seekTo(S.origin); setPlaying(true); break;
@@ -159,11 +193,13 @@ document.addEventListener("pointerdown", e => {
 
 document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.dataset.ic] || ""; });
 
-loadSkin();
+// A reload must start from a clean slate (the local server keeps its session).
+clearSession();
+loadSkin().then(renderSkin);
+renderSkin();
 bindSettings();
 applySettings();
 if (OPT.bgParticles) startParticles();
-startLandingFx();
 openDB();
 getRecent().then(renderRecent);
 

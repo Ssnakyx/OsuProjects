@@ -3,86 +3,101 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#160d13">
+<meta name="theme-color" content="#08080f">
 <title>osu! Replay Viewer</title>
+<meta name="description" content="Watch and compare osu!standard replays in your browser, with your own skin.">
 <link rel="stylesheet" href="static/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23ff66aa'/><circle cx='50' cy='50' r='34' fill='none' stroke='white' stroke-width='6'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%2308080f'/><circle cx='50' cy='50' r='36' fill='none' stroke='%23ff5fa2' stroke-width='9'/><circle cx='50' cy='50' r='13' fill='%23ff5fa2'/></svg>">
 </head>
 <body>
 
-<!-- animated background (landing) -->
-<canvas id="particles"></canvas>
-<div id="aurora"><span></span><span></span><span></span></div>
-<canvas id="tri-bg" data-full aria-hidden="true"></canvas>
-<div id="landing-glow" aria-hidden="true"></div>
-
-<!-- global settings gear (top-right, always visible) -->
-<button id="btn-gear" class="icon-btn" title="Settings">⚙</button>
+<canvas id="particles" aria-hidden="true"></canvas>
+<div id="backdrop" aria-hidden="true"></div>
 
 <!-- ════════ LANDING ════════ -->
 <div id="landing">
-  <header class="brand">
-    <div class="hero">
-      <canvas id="visualizer" class="visualizer" aria-hidden="true"></canvas>
-      <button id="osu-cookie" class="cookie" title="Choose replays / start" aria-label="osu!">
-        <span class="cookie-halo"></span>
-        <span class="cookie-disc">
-          <canvas class="cookie-tri" aria-hidden="true"></canvas>
-          <span class="cookie-label">osu!</span>
-        </span>
-      </button>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i></i></span>
+      <span class="brand-name">osu!<b>replay</b></span>
     </div>
-    <div class="brand-sub">REPLAY&nbsp;&nbsp;VIEWER</div>
+    <nav class="topbar-actions">
+      <button id="btn-patch" class="btn btn-quiet">What's new</button>
+      <button id="btn-gear" class="icon-btn" title="Settings" aria-label="Settings" data-ic="settings"></button>
+    </nav>
   </header>
 
-  <div id="dropzone" class="glass">
-    <canvas class="dz-tri" aria-hidden="true"></canvas>
-    <div class="dz-inner">
-      <div class="dz-icon">⤓</div>
-      <div class="dz-title">Drop your <b>.osr</b> replays here</div>
-      <div class="dz-sub">1 replay to watch &nbsp;·&nbsp; 2 replays to compare</div>
-      <div class="dz-auto">✦ the beatmap downloads automatically ✦</div>
-      <div class="dz-buttons">
-        <button id="btn-replays" class="btn btn-pink">Choose replays…</button>
-        <button id="btn-map" class="btn btn-ghost">Beatmap (.osz / .osu)</button>
+  <main class="landing-grid">
+    <section class="hero">
+      <p class="eyebrow"><span class="pulse"></span>osu!standard replay viewer</p>
+      <h1>Rewatch every<br><span class="hl">click.</span></h1>
+      <p class="lede">Drop one replay to watch it, or two to compare them frame by frame. The beatmap downloads by itself, your skin comes along, and nothing ever leaves your browser.</p>
+      <ul class="facts">
+        <li><b>Auto</b> beatmap download</li>
+        <li><b>.osk</b> skins</li>
+        <li><b>Live</b> score, UR &amp; hit errors</li>
+        <li><b>HR · DT · HT · HD</b> handled</li>
+      </ul>
+    </section>
+
+    <section class="loader">
+      <div id="dropzone">
+        <div class="dz-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg>
+        </div>
+        <div class="dz-title">Drop files anywhere</div>
+        <div class="dz-sub"><b>.osr</b> replays · <b>.osz</b> / <b>.osu</b> beatmaps · <b>.osk</b> skins</div>
+        <div class="dz-buttons">
+          <button id="btn-replays" class="btn btn-primary">Choose replays</button>
+          <button id="btn-map" class="btn btn-ghost">Beatmap</button>
+          <button id="btn-skin" class="btn btn-ghost">Skin</button>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <div id="chips">
-    <div class="chip" id="chip-r0">
-      <span class="dot d0"></span><span class="chip-label">REPLAY 1</span>
-      <span class="chip-value">waiting for file…</span>
-      <span class="chip-spin"></span>
-    </div>
-    <div class="chip" id="chip-r1">
-      <span class="dot d1"></span><span class="chip-label">REPLAY 2</span>
-      <span class="chip-value">optional</span>
-      <span class="chip-spin"></span>
-    </div>
-    <div class="chip" id="chip-map">
-      <span class="dot dm"></span><span class="chip-label">BEATMAP</span>
-      <span class="chip-value">auto-download after replay</span>
-      <span class="chip-spin"></span>
-      <div class="chip-bar"><i></i></div>
-    </div>
-  </div>
+      <div id="chips">
+        <div class="chip" id="chip-r0">
+          <span class="dot d0"></span><span class="chip-label">Replay 1</span>
+          <span class="chip-value">drop a .osr</span>
+          <span class="chip-spin"></span>
+        </div>
+        <div class="chip" id="chip-r1">
+          <span class="dot d1"></span><span class="chip-label">Replay 2</span>
+          <span class="chip-value">optional, to compare</span>
+          <span class="chip-spin"></span>
+        </div>
+        <div class="chip" id="chip-map">
+          <span class="dot dm"></span><span class="chip-label">Beatmap</span>
+          <span class="chip-value">downloads automatically</span>
+          <span class="chip-spin"></span>
+          <div class="chip-bar"><i></i></div>
+        </div>
+        <div class="chip" id="chip-skin">
+          <span class="dot ds"></span><span class="chip-label">Skin</span>
+          <span class="chip-value">built-in</span>
+          <span class="chip-spin"></span>
+          <button id="btn-skin-remove" class="chip-x hidden" title="Remove skin" aria-label="Remove skin">✕</button>
+        </div>
+      </div>
 
-  <button id="btn-watch" class="btn btn-pink btn-watch disabled">▶&nbsp;&nbsp;Start replay</button>
+      <button id="btn-watch" class="btn btn-primary btn-watch disabled">
+        <span data-ic="play" class="btn-ic"></span>Start replay
+      </button>
+    </section>
+  </main>
 
   <section id="recent" class="hidden">
-    <div class="recent-head"><span>RECENT REPLAYS</span><button id="btn-recent-clear" class="btn btn-mini">clear</button></div>
+    <div class="recent-head"><h2>Recent replays</h2><button id="btn-recent-clear" class="btn btn-mini">Clear</button></div>
     <div id="recent-list"></div>
   </section>
 
-  <div class="landing-foot">
-    <button id="btn-clear" class="btn btn-mini">reset session</button>
-    <button id="btn-patch" class="btn btn-mini">✦ what's new</button>
-    <span>maps from osu.direct / catboy.best · best in Chrome / Firefox</span>
-  </div>
+  <footer class="landing-foot">
+    <button id="btn-clear" class="btn btn-mini">Reset session</button>
+    <span>Maps from osu.direct · catboy.best · nerinyan — not affiliated with ppy.</span>
+  </footer>
 
   <input type="file" id="file-replays" accept=".osr" multiple hidden>
   <input type="file" id="file-map" accept=".osu,.osz" hidden>
+  <input type="file" id="file-skin" accept=".osk,.zip" hidden>
 </div>
 
 <!-- ════════ PLAYER ════════ -->
@@ -153,10 +168,10 @@
 
   <canvas id="field"></canvas>
 
-  <button id="btn-skip" class="btn btn-pink hidden">SKIP&nbsp;»</button>
+  <button id="btn-skip" class="btn btn-primary hidden">Skip intro&nbsp;»</button>
 
   <!-- live stats / hit distribution -->
-  <div id="stats-panel" class="glass hidden">
+  <div id="stats-panel" class="hidden">
     <div class="stats-head">HIT DISTRIBUTION<button id="stats-close" class="icon-btn small">✕</button></div>
     <canvas id="hist"></canvas>
     <div id="stats-rows"></div>
@@ -215,7 +230,7 @@
 
 <!-- ════════ SETTINGS ════════ -->
 <div id="settings-modal" class="modal hidden">
-  <div class="modal-card glass" role="dialog">
+  <div class="modal-card" role="dialog">
     <div class="modal-head">
       <h2>Settings</h2>
       <button id="settings-close" class="icon-btn small">✕</button>
@@ -225,13 +240,25 @@
     <div class="set-row">
       <label>Accent colour</label>
       <div class="swatches">
-        <button class="swatch" data-accent="pink"   style="--sw:#ff66aa"></button>
-        <button class="swatch" data-accent="blue"   style="--sw:#5b9dff"></button>
-        <button class="swatch" data-accent="green"  style="--sw:#54e08a"></button>
-        <button class="swatch" data-accent="purple" style="--sw:#b06bff"></button>
-        <button class="swatch" data-accent="orange" style="--sw:#ff9a3c"></button>
-        <button class="swatch" data-accent="red"    style="--sw:#ff5b6b"></button>
+        <button class="swatch" data-accent="pink"   style="--sw:#ff5fa2" aria-label="pink"></button>
+        <button class="swatch" data-accent="blue"   style="--sw:#5b8cff" aria-label="blue"></button>
+        <button class="swatch" data-accent="green"  style="--sw:#3ee08f" aria-label="green"></button>
+        <button class="swatch" data-accent="purple" style="--sw:#a77bff" aria-label="purple"></button>
+        <button class="swatch" data-accent="orange" style="--sw:#ff9b42" aria-label="orange"></button>
+        <button class="swatch" data-accent="red"    style="--sw:#ff5468" aria-label="red"></button>
       </div>
+    </div>
+
+    <div class="set-section">Skin</div>
+    <div class="set-row skin-row">
+      <div class="skin-now"><span class="skin-name" id="skin-name">Built-in</span><span class="skin-src" id="skin-src">vector style</span></div>
+      <div class="skin-actions">
+        <button id="btn-skin-2" class="btn btn-ghost btn-sm">Load .osk…</button>
+        <button id="btn-skin-remove-2" class="btn btn-quiet btn-sm hidden">Remove</button>
+      </div>
+    </div>
+    <div class="set-grid">
+      <label class="switch"><input type="checkbox" data-opt="useSkin"><span></span>Use skin</label>
     </div>
 
     <div class="set-section">Visuals</div>
@@ -250,6 +277,8 @@
       <label class="switch"><input type="checkbox" data-opt="showBorder"><span></span>Playfield border</label>
       <label class="switch"><input type="checkbox" data-opt="showNumbers"><span></span>Combo numbers</label>
       <label class="switch"><input type="checkbox" data-opt="snaking"><span></span>Snaking sliders</label>
+      <label class="switch"><input type="checkbox" data-opt="followPoints"><span></span>Follow points</label>
+      <label class="switch"><input type="checkbox" data-opt="hiddenFx"><span></span>Hidden mod fade</label>
     </div>
 
     <div class="set-section">HUD</div>
@@ -257,19 +286,19 @@
       <label class="switch"><input type="checkbox" data-opt="showUR"><span></span>Unstable rate</label>
       <label class="switch"><input type="checkbox" data-opt="showPP"><span></span>pp estimate</label>
       <label class="switch"><input type="checkbox" data-opt="showFps"><span></span>FPS counter</label>
-      <label class="switch"><input type="checkbox" data-opt="bgParticles"><span></span>Menu particles</label>
+      <label class="switch"><input type="checkbox" data-opt="bgParticles"><span></span>Menu animation</label>
     </div>
 
     <div class="modal-foot">
       <button id="settings-reset" class="btn btn-ghost">Reset to defaults</button>
-      <button id="settings-done" class="btn btn-pink">Done</button>
+      <button id="settings-done" class="btn btn-primary">Done</button>
     </div>
   </div>
 </div>
 
 <!-- ════════ HELP ════════ -->
 <div id="help-modal" class="modal hidden">
-  <div class="modal-card glass">
+  <div class="modal-card">
     <div class="modal-head"><h2>Shortcuts</h2><button id="help-close" class="icon-btn small">✕</button></div>
     <table class="keys">
       <tr><td>Space</td><td>pause / resume</td></tr>
@@ -283,13 +312,14 @@
       <tr><td>F</td><td>fullscreen</td></tr>
       <tr><td>H</td><td>this help</td></tr>
       <tr><td>Esc</td><td>back / close</td></tr>
+      <tr><td colspan="2" class="keys-note">Drop an <b>.osk</b> file anywhere to change skin.</td></tr>
     </table>
   </div>
 </div>
 
 <!-- ════════ RESULTS ════════ -->
 <div id="results-modal" class="modal hidden">
-  <div class="modal-card glass results-card">
+  <div class="modal-card results-card">
     <div class="results-head">
       <div class="results-eyebrow">Replay complete</div>
       <div id="results-title">—</div>
@@ -298,21 +328,21 @@
     <div id="results-grid"></div>
     <div class="modal-foot">
       <button id="results-again" class="btn btn-ghost">↺&nbsp;&nbsp;Watch again</button>
-      <button id="results-menu" class="btn btn-pink">Back to menu</button>
+      <button id="results-menu" class="btn btn-primary">Back to menu</button>
     </div>
   </div>
 </div>
 
 <!-- ════════ PATCH NOTES ════════ -->
 <div id="patch-modal" class="modal hidden">
-  <div class="modal-card glass patch-card">
+  <div class="modal-card patch-card">
     <div class="modal-head">
       <h2>What's new</h2>
       <button id="patch-close" class="icon-btn small">✕</button>
     </div>
     <div id="patch-body"></div>
     <div class="modal-foot">
-      <button id="patch-done" class="btn btn-pink">Got it</button>
+      <button id="patch-done" class="btn btn-primary">Got it</button>
     </div>
   </div>
 </div>
