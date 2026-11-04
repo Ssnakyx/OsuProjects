@@ -104,8 +104,11 @@ function pathAt(o, t01) {
 /* ── viewport / transforms ─────────────────────────────────────────── */
 
 function fitCanvas() {
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth, h = canvas.clientHeight;
+  // While exporting a clip the field is drawn at the video's size instead
+  // of the window's (S.exportView = { w, h, dpr }, see export.js).
+  const ev = S.exportView;
+  const dpr = ev ? ev.dpr : (window.devicePixelRatio || 1);
+  const w = ev ? ev.w : canvas.clientWidth, h = ev ? ev.h : canvas.clientHeight;
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
   }

@@ -13,6 +13,8 @@ import {
 } from "./settings.js";
 import { openPatch, closePatch, closeResults } from "./screens.js";
 import { openDB, getRecent, renderRecent, clearRecent } from "./recent.js";
+import { bindSkinLibrary, renderSkinLibrary, cycleSkin } from "./skinlib.js";
+import { bindExport, openExport, closeExport, exportOpen } from "./export.js";
 
 /* ── small view toggles ────────────────────────────────────────────── */
 
@@ -48,21 +50,20 @@ $("file-skin").onchange = e => { const f = e.target.files[0]; e.target.value = "
 
 async function dropSkin() {
   await removeSkin();
-  toast(SKIN.present ? `Back to the project skin: ${SKIN.name}` : "Skin removed — using the built-in style.", "ok");
+  toast(SKIN.present ? `Back to the project skin: ${SKIN.name}` : "Using the built-in style — your skin stays in the library.", "ok");
   document.dispatchEvent(new CustomEvent("skinchange"));
 }
-$("btn-skin-remove").onclick = dropSkin;
-$("btn-skin-remove-2").onclick = dropSkin;
+$("btn-skin-remove").onclick = e => { e.stopPropagation(); dropSkin(); };
+
+// The landing skin chip opens the library in Settings.
+$("chip-skin").onclick = () => { openSettings(); $("skin-lib").scrollIntoView({ block: "center" }); };
+$("chip-skin").title = "Open your skin library";
 
 function renderSkin() {
   const user = SKIN.present && SKIN.source === "user";
   if (SKIN.present) chip("chip-skin", SKIN.name + (SKIN.author ? `  ·  by ${SKIN.author}` : ""), "ok");
   else chip("chip-skin", "built-in · drop an .osk to use yours");
-  $("skin-name").textContent = SKIN.present ? SKIN.name : "Built-in";
-  $("skin-src").textContent = !SKIN.present ? "vector style, no skin loaded"
-    : user ? "your skin · saved in this browser" : "from the project folder";
   $("btn-skin-remove").classList.toggle("hidden", !user);
-  $("btn-skin-remove-2").classList.toggle("hidden", !user);
 }
 document.addEventListener("skinchange", renderSkin);
 
@@ -147,6 +148,7 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") {
     if (e.code === "Space") e.target.blur(); else return;
   }
+  if (exportOpen()) { if (e.code === "Escape") closeExport(); return; }
   if (!$("settings-modal").classList.contains("hidden")) { if (e.code === "Escape") closeSettings(); return; }
   if (!$("patch-modal").classList.contains("hidden")) { if (e.code === "Escape") closePatch(); return; }
   if (!$("results-modal").classList.contains("hidden")) { if (e.code === "Escape") closeResults(); return; }
@@ -174,6 +176,8 @@ document.addEventListener("keydown", e => {
     case "KeyQ": toggleSlowMo(); break;
     case "Minus": case "NumpadSubtract": { const i = SPEED_OPTS.indexOf(S.speed); setSpeed(SPEED_OPTS[Math.max(0, (i < 0 ? 3 : i) - 1)]); break; }
     case "Equal": case "NumpadAdd": { const i = SPEED_OPTS.indexOf(S.speed); setSpeed(SPEED_OPTS[Math.min(SPEED_OPTS.length - 1, (i < 0 ? 3 : i) + 1)]); break; }
+    case "KeyE": openExport(); break;
+    case "KeyK": cycleSkin(e.shiftKey ? -1 : 1); break;
     case "KeyF": $("btn-full").click(); break;
     case "KeyH": $("btn-help").click(); break;
     case "Escape":
@@ -192,6 +196,9 @@ document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.d
 clearSession();
 loadSkin().then(() => document.dispatchEvent(new CustomEvent("skinchange")));
 renderSkin();
+bindSkinLibrary();
+renderSkinLibrary();
+bindExport();
 bindSettings();
 applySettings();
 if (OPT.bgParticles) startParticles();

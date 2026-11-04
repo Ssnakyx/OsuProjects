@@ -83,7 +83,7 @@
           <span class="dot ds"></span><span class="chip-label">Skin</span>
           <span class="chip-value">built-in</span>
           <span class="chip-spin"></span>
-          <button id="btn-skin-remove" class="chip-x hidden" title="Remove skin" aria-label="Remove skin">✕</button>
+          <button id="btn-skin-remove" class="chip-x hidden" title="Stop using this skin (it stays in your library)" aria-label="Use the default skin">✕</button>
         </div>
       </div>
 
@@ -232,6 +232,7 @@
       <div class="divider"></div>
       <button class="modepill hidden" id="btn-mode" title="Tab"><span class="led"></span><span id="mode-txt">SPLIT</span></button>
       <div class="seg">
+        <button class="icbtn" id="btn-export" data-ic="export" title="Export a video or GIF (E)"></button>
         <button class="icbtn" id="btn-stats" data-ic="stats" title="Hit distribution (D)"></button>
         <button class="icbtn" id="btn-set" data-ic="settings" title="Settings"></button>
         <button class="icbtn" id="btn-files" data-ic="files" title="Load other files"></button>
@@ -264,12 +265,10 @@
     </div>
 
     <div class="set-section">Skin</div>
-    <div class="set-row skin-row">
-      <div class="skin-now"><span class="skin-name" id="skin-name">Built-in</span><span class="skin-src" id="skin-src">vector style</span></div>
-      <div class="skin-actions">
-        <button id="btn-skin-2" class="btn btn-ghost btn-sm">Load .osk…</button>
-        <button id="btn-skin-remove-2" class="btn btn-quiet btn-sm hidden">Remove</button>
-      </div>
+    <div class="skin-lib" id="skin-lib"></div>
+    <div class="skin-lib-foot">
+      <span class="skin-lib-note" id="skin-lib-note"></span>
+      <button id="btn-skin-2" class="btn btn-ghost btn-sm">Add .osk…</button>
     </div>
     <div class="set-grid">
       <label class="switch"><input type="checkbox" data-opt="useSkin"><span></span>Use skin</label>
@@ -333,10 +332,12 @@
       <tr><td>Q</td><td>slow motion 0.25× on / off</td></tr>
       <tr><td>- / +</td><td>playback speed</td></tr>
       <tr><td>D</td><td>stats / hit distribution</td></tr>
+      <tr><td>K</td><td>next skin from your library</td></tr>
+      <tr><td>E</td><td>export a video / GIF</td></tr>
       <tr><td>F</td><td>fullscreen</td></tr>
       <tr><td>H</td><td>this help</td></tr>
       <tr><td>Esc</td><td>back / close</td></tr>
-      <tr><td colspan="2" class="keys-note">Drop an <b>.osk</b> file anywhere to change skin.</td></tr>
+      <tr><td colspan="2" class="keys-note">Drop an <b>.osk</b> file anywhere to add it to your skin library.</td></tr>
     </table>
   </div>
 </div>
@@ -400,6 +401,70 @@
     <div class="modal-foot">
       <button id="results-again" class="btn btn-ghost">↺&nbsp;&nbsp;Watch again</button>
       <button id="results-menu" class="btn btn-primary">Back to menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ EXPORT ════════ -->
+<div id="export-modal" class="modal hidden">
+  <div class="modal-card export-card" role="dialog">
+    <div class="modal-head">
+      <div><h2>export <b>clip</b></h2><div class="modal-sub">save a moment or the whole replay as a video or a GIF</div></div>
+      <button id="export-close" class="icon-btn small" aria-label="Close">✕</button>
+    </div>
+
+    <div id="ex-form">
+      <div class="set-section">Range</div>
+      <div class="ex-presets">
+        <button class="btn btn-mini ex-preset" data-p="all">Whole replay</button>
+        <button class="btn btn-mini ex-preset" data-p="before">10 s before now</button>
+        <button class="btn btn-mini ex-preset" data-p="after">10 s from now</button>
+      </div>
+      <div class="set-row ex-time-row">
+        <label for="ex-from">From</label>
+        <input id="ex-from" class="ex-time" inputmode="decimal" spellcheck="false" autocomplete="off">
+        <button id="ex-from-now" class="btn btn-quiet btn-sm">Current time</button>
+      </div>
+      <div class="set-row ex-time-row">
+        <label for="ex-to">To</label>
+        <input id="ex-to" class="ex-time" inputmode="decimal" spellcheck="false" autocomplete="off">
+        <button id="ex-to-now" class="btn btn-quiet btn-sm">Current time</button>
+      </div>
+
+      <div class="set-section">Format</div>
+      <div class="ex-fmts">
+        <button class="ex-fmt" id="ex-fmt-video" data-fmt="video"><b>Video</b><span id="ex-fmt-video-sub">MP4 · with sound</span></button>
+        <button class="ex-fmt" data-fmt="gif"><b>GIF</b><span>silent · loops · up to 20 s</span></button>
+      </div>
+      <div class="set-row" id="ex-res-row">
+        <label for="ex-res">Quality</label>
+        <select id="ex-res" class="ex-select"><option value="720" selected>720p · 1280×720</option><option value="1080">1080p · 1920×1080</option></select>
+      </div>
+      <div class="set-row hidden" id="ex-gif-row">
+        <label for="ex-gif">Size</label>
+        <select id="ex-gif" class="ex-select"><option value="s">Small · 360 px · 20 fps</option><option value="m" selected>Medium · 480 px · 20 fps</option><option value="l">Large · 640 px · 25 fps</option></select>
+      </div>
+      <div class="set-grid">
+        <label class="switch"><input type="checkbox" id="ex-hud" checked><span></span>Score overlay</label>
+        <label class="switch" id="ex-audio-wrap"><input type="checkbox" id="ex-audio" checked><span></span>Music &amp; hit sounds</label>
+      </div>
+      <p class="ex-note" id="ex-note"></p>
+    </div>
+
+    <div id="ex-busy" class="hidden">
+      <div class="ex-preview" id="ex-preview"></div>
+      <div class="ex-progress"><i id="ex-bar"></i></div>
+      <div class="ex-status" id="ex-status">Starting…</div>
+    </div>
+
+    <div id="ex-done" class="hidden">
+      <div class="ex-preview"><video id="ex-video" controls playsinline></video><img id="ex-img" class="hidden" alt="exported GIF"></div>
+      <div class="ex-status" id="ex-file"></div>
+    </div>
+
+    <div class="modal-foot">
+      <button id="ex-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="ex-go" class="btn btn-primary">Record</button>
     </div>
   </div>
 </div>
