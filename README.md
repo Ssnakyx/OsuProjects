@@ -106,6 +106,27 @@ Drag & drop anywhere (or use the buttons / `O` key):
 
 If the auto-download can't find the map (unranked / very old maps), drop the `.osz` manually.
 
+### 🔗 Loading from a link (web)
+
+Paste into the **link box** on the menu (or press ⌘V / Ctrl+V anywhere on it, or drag a link onto the page):
+
+| You paste | What happens |
+|-----------|--------------|
+| a beatmap link — `osu.ppy.sh/beatmapsets/1#osu/75`, `/beatmaps/75`, `/b/75`, `/s/1` — or a bare beatmap ID (`75`, `s1` for a set) | the map downloads from the mirrors and that difficulty is selected; then drop the replay |
+| a direct link to a `.osr` file | the replay downloads and its map follows automatically (the online version can only read hosts that allow cross-site downloads; the local version has no such limit) |
+| a score link — `osu.ppy.sh/scores/…` | see below |
+
+`?link=<anything above>` in the page URL loads it on open, so a viewer link can be shared.
+
+**Score links and their limit.** osu! only gives replay files to a *signed-in* player, and its API needs an OAuth app secret — something a public website can't hold. So:
+
+- **Online version:** the viewer explains this and links the score page; click *Download replay* there and drop the file.
+- **Local version (`python main.py --web`):** create a free OAuth app at <https://osu.ppy.sh/home/account/edit> (section *OAuth*, any callback URL) and give its id/secret to the viewer, either as env vars `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` or in `~/.osu-replay-viewer/osu-api.json` (`{"client_id": 123, "client_secret": "…"}`). The viewer then reads the score to download its beatmap, and tries to fetch the replay; if osu! refuses the replay to an app token, the map is still loaded and you only drop the `.osr`. The secret never leaves your machine.
+
+### ⚡ Faster start (online version)
+
+The online version runs Python in your browser (Pyodide, ~15 MB). It now starts downloading as soon as you reach for a file, shows real progress in the **Engine** line, and is kept in a service-worker cache: on later visits it starts from the cache (nothing downloaded) and warms up in the background before you even drop a file. The last 12 downloaded beatmaps are cached too.
+
 ---
 
 ## 🗂 Project structure
@@ -124,6 +145,7 @@ OsuProjects/
 │   ├── scoring.py        Hit detection → score/combo/acc/judgment timeline
 │   ├── mods.py           Mod bitmask helpers (HR/EZ/DT/HT windows & stats)
 │   ├── mirror.py         Beatmap auto-download (osu.direct, catboy, nerinyan)
+│   ├── osuapi.py         Optional osu! API v2 for score links (local server only)
 │   ├── webjson.py        JSON for the browser (shared by server.py and Pyodide)
 │   ├── skin.py           .osk skin loader (cursor, circles, colours)
 │   ├── config.py         Colours & constants
@@ -153,7 +175,8 @@ OsuProjects/
 
 ```bash
 pip install pytest
-python -m pytest tests          # parsing, stacking, scoring, web JSON
+python -m pytest tests          # parsing, stacking, scoring, web JSON, link maps
+node tests/links.test.mjs       # the web link parser
 ```
 
 ---

@@ -25,6 +25,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from src import mirror
+from src import osuapi
 from src import webjson
 from src.beatmap import load_beatmap
 from src.replay import load_replay, Replay
@@ -63,6 +64,7 @@ class Session:
         self.beatmap_path: Optional[str] = None
         self.beatmap = None
         self.extract_dir: Optional[str] = None
+        self.prefer_bid: Optional[int] = None   # difficulty asked for by a link
         self.status: str = ""
         self.dl_busy = False
 
@@ -79,6 +81,7 @@ class Session:
             if self.extract_dir and os.path.isdir(self.extract_dir):
                 shutil.rmtree(self.extract_dir, ignore_errors=True)
             self.extract_dir = None
+            self.prefer_bid = None
             self.status = ""
 
 
@@ -99,13 +102,14 @@ def _ingest_osz(path: str) -> int:
     S.candidates = osu_paths
     S.beatmap_path = None
     S.beatmap = None
+    S.prefer_bid = None
     return len(osu_paths)
 
 
 def _resolve_beatmap() -> None:
     """Pick the candidate matching the replays' MD5 (else first) and parse it."""
     target = _target_md5()
-    pick = webjson.pick_candidate(S.candidates, target)
+    pick = webjson.pick_candidate(S.candidates, target, S.prefer_bid)
     if pick and (pick != S.beatmap_path or S.beatmap is None):
         S.beatmap_path = pick
         S.beatmap = load_beatmap(pick)
@@ -250,9 +254,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._file(os.path.join(STATIC_DIR, name), cache=False)
             elif path == "/api/status":
-                self._json({"status": S.status, "busy": S.dl_busy})
+                self._json({"status": S.status, "busy": S.dl_busy,
+                            "osuApi": osuapi.configured()})
             elif path == "/api/auto":
                 self._auto_download(q.get("md5", [""])[0])
+            elif path == "/api/link/map":
+                self._link_map(_int(q, "sid"), _int(q, "bid"))
+            elif path == "/api/link/osr":
+                self._link_osr(q.get("url", [""])[0])
+            elif path == "/api/link/score":
+                self._link_score(_int(q, "id"), q.get("ruleset", [""])[0] or None)
+            elif path == "/api/link/score/osr":
+                self._link_score_osr(_int(q, "id"), q.get("ruleset", [""])[0] or None)
             elif path == "/api/map":
                 with S.lock:
                     if not S.candidates:
@@ -313,14 +326,63 @@ class Handler(BaseHTTPRequestHandler):
         if not md5:
             self._error("missing md5")
             return
+        self._download_map(lambda: mirror.fetch_osz_for_md5(md5, S.set_status))
+
+    def _link_map(self, sid: Optional[int], bid: Optional[int]) -> None:
+        if not (sid or bid):
+            self._error("missing beatmap id")
+            return
+        self._download_map(lambda: mirror.fetch_osz_for_link(sid, bid, S.set_status),
+                           prefer_bid=bid)
+
+    def _bytes(self, data: bytes) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _link_osr(self, url: str) -> None:
+        # Server-side fetch: sidesteps CORS on hosts that share .osr files.
+        try:
+            self._bytes(mirror.fetch_bytes(url))
+        except RuntimeError as exc:
+            self._error(str(exc), 502)
+
+    def _link_score(self, score_id: Optional[int], ruleset: Optional[str]) -> None:
+        if not score_id:
+            self._error("missing score id")
+            return
+        if not osuapi.configured():
+            self._error("osu! API not configured", 501)
+            return
+        try:
+            self._json(osuapi.score_info(score_id, ruleset))
+        except osuapi.ApiError as exc:
+            self._error(str(exc), 502)
+
+    def _link_score_osr(self, score_id: Optional[int], ruleset: Optional[str]) -> None:
+        if not score_id or not osuapi.configured():
+            self._error("osu! API not configured", 501)
+            return
+        try:
+            self._bytes(osuapi.download_replay(score_id, ruleset))
+        except osuapi.ReplayRefused as exc:
+            self._error(str(exc), 403)
+        except osuapi.ApiError as exc:
+            self._error(str(exc), 502)
+
+    def _download_map(self, fetch, prefer_bid: Optional[int] = None) -> None:
         if S.dl_busy:
             self._json({"busy": True}, 409)
             return
         S.dl_busy = True
         try:
-            osz = mirror.fetch_osz_for_md5(md5, S.set_status)
+            osz = fetch()
             with S.lock:
                 n = _ingest_osz(osz)
+                S.prefer_bid = prefer_bid
                 _resolve_beatmap()
             S.set_status("")
             self._json({"ok": True, "diffs": n})
@@ -370,6 +432,7 @@ class Handler(BaseHTTPRequestHandler):
                         S.candidates = [p]
                         S.beatmap_path = None
                         S.beatmap = None
+                        S.prefer_bid = None
                         n = 1
                     elif ext == ".osz":
                         p = os.path.join(S.tmp, "uploaded.osz")
@@ -398,6 +461,14 @@ class Handler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+def _int(q: dict, key: str) -> Optional[int]:
+    try:
+        v = int(q.get(key, [""])[0])
+        return v if v > 0 else None
+    except ValueError:
+        return None
+
 
 def _lan_ip() -> str:
     """Best-effort guess of this machine's LAN IP address."""

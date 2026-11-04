@@ -97,13 +97,39 @@ def extract_osz(path: str, dest: str) -> List[str]:
     return sorted(osu_paths)
 
 
-def pick_candidate(candidates: List[str], target_md5: Optional[str]) -> Optional[str]:
-    """The difficulty matching the replay's MD5, else the first one."""
+def beatmap_id_of(path: str) -> int:
+    """``BeatmapID`` from an .osu file's [Metadata], or 0 — a cheap header scan
+    (no full parse) used to pick a difficulty from a set by its id."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("BeatmapID:"):
+                    try:
+                        return int(line[10:].strip())
+                    except ValueError:
+                        return 0
+                if line == "[Difficulty]":      # [Metadata] is before it
+                    break
+    except OSError:
+        pass
+    return 0
+
+
+def pick_candidate(candidates: List[str], target_md5: Optional[str],
+                   prefer_bid: Optional[int] = None) -> Optional[str]:
+    """The difficulty matching the replay's MD5; else (no replay yet, e.g. a
+    map loaded from a link) the one with BeatmapID *prefer_bid*; else the
+    first one."""
     if not candidates:
         return None
     if target_md5:
         for p in candidates:
             if md5_of(p) == target_md5:
+                return p
+    if prefer_bid:
+        for p in candidates:
+            if beatmap_id_of(p) == prefer_bid:
                 return p
     return candidates[0]
 
@@ -151,6 +177,7 @@ def map_json(bm: Beatmap, beatmap_path: str, n_candidates: int,
     return {
         "title": bm.title, "artist": bm.artist, "version": bm.version,
         "creator": bm.creator, "setId": bm.beatmapset_id,
+        "beatmapId": bm.beatmap_id,
         "cs": bm.cs, "ar": bm.ar, "od": bm.od, "hp": bm.hp,
         "stackLeniency": bm.stack_leniency, "formatVersion": bm.format_version,
         "md5": md5,

@@ -151,3 +151,41 @@ def test_json_payloads(fixtures):
     assert len(ev["events"]) == 6 and len(ev["windows"]) == 3
     assert all(len(e) == 13 for e in ev["events"])   # last field = note time
     assert webjson.replay_json(rp, 0)["player"] == "alice"
+
+
+# ── beatmap links ──────────────────────────────────────────────────────────
+
+def _diff(tmp_path, name, bid, version):
+    p = write_osu(tmp_path / name, "100,100,1000,1,0")
+    txt = p.read_text() if hasattr(p, "read_text") else open(p).read()
+    txt = txt.replace("[Metadata]", f"[Metadata]\nVersion:{version}\nBeatmapID:{bid}\nBeatmapSetID:9", 1)
+    open(str(p), "w").write(txt)
+    return str(p)
+
+
+def test_beatmap_id_is_parsed(tmp_path):
+    p = _diff(tmp_path, "a.osu", 4242, "Hard")
+    assert load_beatmap(p).beatmap_id == 4242
+    assert webjson.beatmap_id_of(p) == 4242
+
+
+def test_pick_candidate_prefers_linked_difficulty_until_a_replay_says_otherwise(tmp_path):
+    a = _diff(tmp_path, "a.osu", 11, "Easy")
+    b = _diff(tmp_path, "b.osu", 22, "Insane")
+    assert webjson.pick_candidate([a, b], None) == a
+    assert webjson.pick_candidate([a, b], None, prefer_bid=22) == b
+    # a replay's MD5 always wins over the link's difficulty
+    assert webjson.pick_candidate([a, b], webjson.md5_of(a), prefer_bid=22) == a
+    assert webjson.pick_candidate([a, b], None, prefer_bid=999) == a
+
+
+def test_fetch_osz_for_link_resolves_beatmap_id(monkeypatch, tmp_path):
+    from src import mirror
+    seen = []
+    monkeypatch.setattr(mirror, "_get", lambda url, timeout=20.0: (seen.append(url), b'{"id": 75, "beatmapset_id": 1}')[1])
+    monkeypatch.setattr(mirror, "download_osz", lambda sid, status=None: f"/maps/{sid}.osz")
+    assert mirror.fetch_osz_for_link(None, 75) == "/maps/1.osz"
+    assert seen and seen[0].endswith("/b/75")
+    assert mirror.fetch_osz_for_link(5, None) == "/maps/5.osz"
+    with pytest.raises(RuntimeError):
+        mirror.fetch_bytes("http://insecure.example/x.osr")

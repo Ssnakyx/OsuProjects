@@ -14,6 +14,7 @@ Layout produced (the page is served at the folder root)::
 
     dist/
       index.html              ← entry point (relative asset paths)
+      sw.js                   ← service worker (caches the Python runtime)
       static/
         style.css  js/*.js
         webcore.py            ← in-browser backend glue
@@ -56,6 +57,10 @@ def build(out_dir: str) -> None:
     # Entry point at the site root, with relative asset paths.
     shutil.copy2(os.path.join(STATIC_SRC, "index.html"),
                  os.path.join(out_dir, "index.html"))
+
+    # Service worker at the site root, so its scope covers index.html
+    # (it caches the Pyodide runtime for fast repeat visits).
+    shutil.copy2(os.path.join(STATIC_SRC, "sw.js"), os.path.join(out_dir, "sw.js"))
 
     # The shared core, under static/src/ where api.js fetches it.
     src_out = os.path.join(static_out, "src")

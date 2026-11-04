@@ -14,6 +14,7 @@ import { setPlaying, setSpeed, initSfx, tick } from "./playback.js";
 import { applySettings, startParticles, stopParticles } from "./settings.js";
 import { saveRecentReplays } from "./recent.js";
 import { prepareTimeline } from "./timeline.js";
+import { parseLink } from "./links.js";
 
 /* ── file intake ───────────────────────────────────────────────────── */
 
@@ -59,13 +60,19 @@ function currentBeatmapMd5() {
 }
 
 async function uploadReplay(file) {
-  const buf = await file.arrayBuffer();
+  await ingestReplay(await file.arrayBuffer());
+}
+
+async function ingestReplay(buf) {
+  const slotChip = "chip-r" + freeSlot();
+  chip(slotChip, "reading replay…", "busy");
   let data;
   try {
     data = await postReplay(buf);
   } catch (e) {
+    chip(slotChip, "couldn't read it — try another .osr", "err");
     toast("Couldn't read replay: " + e.message, "error");
-    return;
+    return false;
   }
   // Dropping a replay for a *different* beatmap? Start fresh so the correct
   // map downloads and the right song plays (not the previous one).
@@ -76,7 +83,7 @@ async function uploadReplay(file) {
       data = await postReplay(buf);
     } catch (e) {
       toast("Couldn't read replay: " + e.message, "error");
-      return;
+      return false;
     }
   }
   S.replays[data.slot] = data;
@@ -87,6 +94,7 @@ async function uploadReplay(file) {
   if (S.replays[0] && S.replays[1] && S.replays[0].md5 !== S.replays[1].md5)
     toast("Heads up: the two replays are from different beatmaps.", "warn");
   await afterFilesChanged();
+  return true;
 }
 
 async function uploadMap(file) {
@@ -111,8 +119,9 @@ async function fetchMap() {
     toast("Exact difficulty not found (MD5 mismatch) — using the closest one.", "warn");
 }
 
-async function autoFetch(md5) {
-  if (S.mapFetching) return;
+// Run a beatmap download (auto by md5, or from a link) with chip progress.
+async function downloadMap(fetchFn, failLabel) {
+  if (S.mapFetching) return false;
   S.mapFetching = true;
   chip("chip-map", "searching mirrors…", "busy");
   const onStatus = (msg) => {
@@ -120,14 +129,103 @@ async function autoFetch(md5) {
     chip("chip-map", msg, "busy", m ? +m[1] : null);
   };
   try {
-    await api.autoDownload(md5, onStatus);
+    await fetchFn(onStatus);
     await fetchMap();
-    await afterFilesChanged();
   } catch (e) {
-    chip("chip-map", "not found — drop the .osz manually", "err");
+    chip("chip-map", failLabel, "err");
     toast(e.message, "error", 6000);
+    return false;
   } finally {
     S.mapFetching = false;
+  }
+  await afterFilesChanged();
+  return true;
+}
+
+function autoFetch(md5) {
+  return downloadMap(st => api.autoDownload(md5, st), "not found — paste the map link or drop the .osz");
+}
+
+/* ── loading from a pasted link ────────────────────────────────────── */
+
+const hint = (html) => {
+  const el = $("link-hint");
+  el.innerHTML = html || "";
+  el.classList.toggle("hidden", !html);
+};
+
+// Returns true when something was loaded (so the caller can clear the box).
+export async function loadLink(raw) {
+  const link = parseLink(raw);
+  if (!link) {
+    toast("That isn't an osu! beatmap or score link (or a beatmap ID).", "error");
+    return false;
+  }
+  hint("");
+  const box = $("link-form");
+  box.classList.add("busy");
+  try {
+    if (link.kind === "map") return await loadMapLink(link);
+    if (link.kind === "osr") return await loadOsrLink(link.url);
+    return await loadScoreLink(link);
+  } finally {
+    box.classList.remove("busy");
+  }
+}
+
+async function loadMapLink(link, { quiet = false } = {}) {
+  // A replay already loaded is kept: pasting the map link is the fix when the
+  // automatic download didn't find its beatmap.
+  const ok = await downloadMap(st => api.loadMapLink(link, st), "download failed — try again or drop the .osz");
+  if (ok && !quiet && !S.replays.some(Boolean))
+    toast("Beatmap ready — now drop a replay (.osr) played on it.", "ok", 5000);
+  return ok;
+}
+
+async function loadOsrLink(url) {
+  chip("chip-r" + freeSlot(), "downloading replay…", "busy");
+  let buf;
+  try { buf = await api.fetchOsr(url); }
+  catch (e) {
+    chip("chip-r" + freeSlot(), "download failed", "err");
+    toast("Couldn't download the replay: " + e.message, "error", 7000);
+    return false;
+  }
+  return ingestReplay(buf);
+}
+
+async function loadScoreLink({ id, ruleset }) {
+  if (ruleset && ruleset !== "osu") {
+    toast("Only osu!standard scores can be watched here.", "error");
+    return false;
+  }
+  const page = `https://osu.ppy.sh/scores/${ruleset ? ruleset + "/" : ""}${id}`;
+  const pageLink = `<a href="${page}" target="_blank" rel="noopener">open the score page ↗</a>`;
+  const { osuApi } = await api.capabilities();
+  if (!osuApi) {
+    hint(`<b>osu! only lets signed-in players download replays</b>, so this page can't fetch it for you. ` +
+         `${pageLink}, click <b>Download replay</b>, then drop the .osr here — the beatmap downloads by itself.`);
+    return false;
+  }
+  const slotChip = "chip-r" + freeSlot();
+  chip(slotChip, "looking up score…", "busy");
+  let info;
+  try { info = await api.scoreInfo(id, ruleset); }
+  catch (e) {
+    chip(slotChip, "score not found", "err");
+    toast(e.message, "error", 6000);
+    return false;
+  }
+  chip(slotChip, `downloading ${info.player || "the"} replay…`, "busy");
+  try {
+    return await ingestReplay(await api.scoreReplay(id, ruleset));
+  } catch (e) {
+    // Expected with an app-only token: still fetch the map, ask for the file.
+    chip(slotChip, "drop the .osr from the score page", "err");
+    hint(`<b>osu! didn't hand over this replay</b> (${escapeHtml(e.message.replace(/\.$/, ""))}). The beatmap is loading — ` +
+         `${pageLink}, click <b>Download replay</b> and drop the file here.`);
+    if (info.setId || info.beatmapId) await loadMapLink({ sid: info.setId, bid: info.beatmapId }, { quiet: true });
+    return false;
   }
 }
 
@@ -251,4 +349,5 @@ export async function clearSession() {
   chip("chip-r0", "drop a .osr");
   chip("chip-r1", "optional, to compare");
   chip("chip-map", "downloads automatically");
+  hint("");
 }

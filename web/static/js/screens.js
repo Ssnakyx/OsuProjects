@@ -12,6 +12,20 @@ import { buildDuel, renderDuel, drawDuel } from "./compare.js";
 
 const PATCH_NOTES = [
   {
+    ver: "3.4", name: "Links & a faster start", date: "2026-11-04",
+    changes: [
+      { tag: "added", items: [
+        "<b>Load from a link</b>: paste a beatmap link or a beatmap ID in the new box (or anywhere on the menu, or drag the link in) and the map downloads with the right difficulty selected. A direct link to an <b>.osr</b> works too.",
+        "Score links are recognised: osu! only lets signed-in players download replays, so the viewer links you to the score page to grab the file. The local version can use your own osu! API app to fetch the map for you.",
+        "<code>?link=…</code> in the address opens a beatmap or replay link straight away, handy for sharing.",
+      ]},
+      { tag: "changed", items: [
+        "<b>Much faster start online</b>: the Python engine is now kept in your browser's cache, warms up in the background before you drop a file, and its loading shows real progress.",
+        "The last 12 downloaded beatmaps are cached, so rewatching a map is instant.",
+      ]},
+    ],
+  },
+  {
     ver: "3.3", name: "Clips & skin library", date: "2026-11-04",
     changes: [
       { tag: "added", items: [

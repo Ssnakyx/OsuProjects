@@ -387,6 +387,52 @@ body.playing #particles, body.playing #backdrop { display: none; }
 .dz-sub b { color: var(--light); font-weight: 600; }
 .dz-buttons { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
 
+/* ── load from a link ── */
+.linkbox {
+  display: flex; align-items: center; gap: 10px;
+  height: 46px; padding: 0 8px 0 14px;
+  border-radius: var(--r);
+  background: var(--b3);
+  box-shadow: inset 0 0 0 1px var(--stroke);
+  transition: box-shadow .2s, background .2s;
+}
+.linkbox:focus-within { background: var(--b4); box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 24px -10px var(--accent-glow); }
+.linkbox.busy { box-shadow: inset 0 0 0 1.5px var(--yellow); }
+.lb-ic { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.lb-ic svg { width: 100%; height: 100%; }
+#link-input {
+  flex: 1; min-width: 0; height: 100%;
+  background: transparent; border: 0; outline: 0;
+  font: inherit; font-size: 14px; color: var(--text);
+}
+#link-input::placeholder { color: var(--dimmer); }
+#link-go { height: 30px; color: var(--text); --sh-bg: var(--b5); }
+.link-hint {
+  margin-top: -6px; padding: 10px 14px;
+  border-radius: var(--r); font-size: 12.5px; line-height: 1.5; color: var(--dim);
+  background: color-mix(in srgb, var(--yellow) 8%, var(--b3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow) 30%, transparent);
+}
+.link-hint b { color: var(--text); font-weight: 600; }
+.link-hint a { color: var(--accent); }
+
+/* ── Python engine boot status (static build only) ── */
+.engine {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 12px;
+  height: 34px; padding: 0 14px;
+  border-radius: var(--r); background: var(--b3);
+  font-size: 12.5px; color: var(--dimmer);
+}
+.engine-label { width: 74px; flex: none; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); }
+.engine-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.engine-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+.engine-bar i { display: block; height: 100%; width: 0; background: var(--yellow); transition: width .2s; }
+.engine.busy .engine-txt { color: var(--yellow); }
+.engine.ok .engine-txt { color: var(--green); }
+.engine.ok .engine-bar i { background: var(--green); }
+.engine.err .engine-txt { color: #ffa3a3; }
+
 /* ── file slots, styled like carousel panels ── */
 #chips { display: flex; flex-direction: column; gap: 7px; }
 .chip {
