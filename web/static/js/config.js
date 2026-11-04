@@ -8,7 +8,7 @@ export const JUDGE_COLORS = { 300: [92, 200, 255], 100: [62, 224, 143], 50: [255
 
 export const JUDGE_POPUP_MS = 650;
 export const ERRORBAR_MS = 4000;
-export const SPEED_OPTS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+export const SPEED_OPTS = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export const MOD = { NF: 1, EZ: 2, HD: 8, HR: 16, DT: 64, HT: 256, NC: 512, FL: 1024 };
 
@@ -20,6 +20,8 @@ export const ICONS = {
   restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.6-6.36"/><path d="M3 4v4.5h4.5"/></svg>',
   stepB:   '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5.5" width="2.6" height="13" rx="1"/><path d="M20 6.2v11.6a1 1 0 0 1-1.55.83l-8.4-5.8a1 1 0 0 1 0-1.66l8.4-5.8A1 1 0 0 1 20 6.2Z"/></svg>',
   stepF:   '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="16.4" y="5.5" width="2.6" height="13" rx="1"/><path d="M4 6.2v11.6a1 1 0 0 0 1.55.83l8.4-5.8a1 1 0 0 0 0-1.66l-8.4-5.8A1 1 0 0 0 4 6.2Z"/></svg>',
+  missPrev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7l-5 5 5 5"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg>',
+  missNext:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7l5 5-5 5"/><path d="M3.5 9.5l5 5M8.5 9.5l-5 5"/></svg>',
   stats:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19V11M12 19V5M19 19v-6"/></svg>',
   settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.1"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L12.3 3h-3.6l-.4 2.4A7.6 7.6 0 0 0 5.7 6.9l-2-.8L1.9 9.2l1.7 1.3a7.7 7.7 0 0 0 0 3L1.9 14.8l1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.4 2.4h3.6l.4-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1Z" stroke-linejoin="round"/></svg>',
   files:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -45,6 +47,7 @@ export const DEFAULTS = {
   showKeys: true, showErrorBar: true, showJudgments: true, show300: false,
   showApproach: true, showBorder: true, showNumbers: true, snaking: true,
   followPoints: true, hiddenFx: true, useSkin: true,
+  cursorGap: true, seekMarks: true, seekHeat: true,
   showUR: true, showPP: true, showFps: false, bgParticles: true,
   musicVol: 60, sfxVol: 90,
 };
@@ -52,4 +55,4 @@ export const OPT_UNIT = { bgDim: "%", bgBlur: "px", cursorScale: "%", trail: "%"
 
 // Bump APP_VERSION whenever a release is added to the top of PATCH_NOTES;
 // the "what's new" modal then auto-opens once for returning visitors.
-export const APP_VERSION = "3.1";
+export const APP_VERSION = "3.2";

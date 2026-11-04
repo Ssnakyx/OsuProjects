@@ -193,6 +193,8 @@
         <button class="icbtn" id="btn-restart" data-ic="restart" title="Restart (R)"></button>
         <button class="icbtn" id="btn-step-b" data-ic="stepB" title="Step back (,)"></button>
         <button class="icbtn" id="btn-step-f" data-ic="stepF" title="Step forward (.)"></button>
+        <button class="icbtn" id="btn-miss-prev" data-ic="missPrev" title="Previous miss ([)"></button>
+        <button class="icbtn" id="btn-miss-next" data-ic="missNext" title="Next miss (])"></button>
       </div>
     </div>
 
@@ -202,7 +204,9 @@
         <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="seek">
         <div class="track-bg"></div>
         <div class="track-fill" id="seek-fill"></div>
+        <canvas class="track-marks" id="seek-marks" aria-hidden="true"></canvas>
         <div class="track-thumb" id="seek-thumb"></div>
+        <div class="seek-tip hidden" id="seek-tip"></div>
       </div>
       <span class="tlabel dim" id="time-dur">00:00</span>
     </div>
@@ -210,6 +214,7 @@
     <div class="t-right">
       <div class="speed"><span class="lbl">SPEED</span>
         <select id="speed" title="Playback speed">
+          <option value="0.1">0.1×</option>
           <option value="0.25">0.25×</option>
           <option value="0.5">0.5×</option>
           <option value="0.75">0.75×</option>
@@ -288,6 +293,13 @@
       <label class="switch"><input type="checkbox" data-opt="snaking"><span></span>Snaking sliders</label>
       <label class="switch"><input type="checkbox" data-opt="followPoints"><span></span>Follow points</label>
       <label class="switch"><input type="checkbox" data-opt="hiddenFx"><span></span>Hidden mod fade</label>
+      <label class="switch"><input type="checkbox" data-opt="cursorGap"><span></span>Cursor gap (2 replays)</label>
+    </div>
+
+    <div class="set-section">Seek bar</div>
+    <div class="set-grid">
+      <label class="switch"><input type="checkbox" data-opt="seekMarks"><span></span>Misses &amp; 50s</label>
+      <label class="switch"><input type="checkbox" data-opt="seekHeat"><span></span>Hard sections</label>
     </div>
 
     <div class="set-section">HUD</div>
@@ -315,7 +327,10 @@
       <tr><td>S</td><td>skip intro</td></tr>
       <tr><td>Tab</td><td>overlay ↔ side-by-side</td></tr>
       <tr><td>← →</td><td>seek ± 5 s</td></tr>
-      <tr><td>, .</td><td>step one frame (paused)</td></tr>
+      <tr><td>, .</td><td>step one replay frame (pauses)</td></tr>
+      <tr><td>⇧ , ⇧ .</td><td>jump to the previous / next note</td></tr>
+      <tr><td>[ ]</td><td>jump to the previous / next miss</td></tr>
+      <tr><td>Q</td><td>slow motion 0.25× on / off</td></tr>
       <tr><td>- / +</td><td>playback speed</td></tr>
       <tr><td>D</td><td>stats / hit distribution</td></tr>
       <tr><td>F</td><td>fullscreen</td></tr>
@@ -349,6 +364,20 @@
         <canvas id="res-timeline"></canvas>
         <div id="res-tip" class="res-tip hidden"></div>
       </div>
+    </section>
+
+    <section class="res-section hidden" id="res-duel">
+      <div class="res-sec-head">
+        <h3>head <b>to head</b></h3>
+        <span class="res-hint">cursor gap at every note · bar colour = who handled it better · click to watch</span>
+      </div>
+      <div id="duel-summary"></div>
+      <div class="res-chart" id="duel-wrap">
+        <canvas id="duel-chart"></canvas>
+        <div id="duel-tip" class="res-tip hidden"></div>
+      </div>
+      <div class="res-sub-head">notes judged <b>differently</b></div>
+      <div id="duel-list" class="mlist"></div>
     </section>
 
     <div class="res-two">

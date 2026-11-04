@@ -6,10 +6,26 @@ import { APP_VERSION, MOD, PLAYER_COLORS, JUDGE_COLORS } from "./config.js";
 import { triLayer } from "./landing-fx.js";
 import { prepStats, urAt, ppAt } from "./stats.js";
 import { seekTo, setPlaying } from "./playback.js";
+import { buildDuel, renderDuel, drawDuel } from "./compare.js";
 
 /* ════════ patch notes ════════ */
 
 const PATCH_NOTES = [
+  {
+    ver: "3.2", name: "Head to head", date: "2026-11-04",
+    changes: [
+      { tag: "added", items: [
+        "<b>Head to head</b> on the results screen when two replays are loaded: the cursor gap at every note, who handled each note better, a win tally with streaks and the list of notes the two players were judged differently on. Click any of them to rewatch.",
+        "The accuracy timeline now shades the gap between both curves in the leader's colour, and its tooltip says who leads and by how much.",
+        "In overlay mode a dashed line joins the two cursors with their distance in osu! pixels (Settings → Overlays → Cursor gap).",
+        "The <b>seek bar</b> shows every miss and 50 (per player) and lights up the <b>hard sections</b> of the map; hover it to see what is there.",
+        "Jump to the previous / next miss with <b>[</b> and <b>]</b> (or the new buttons), step note by note with <b>Shift + , / .</b>, and toggle <b>0.25× slow motion</b> with <b>Q</b>. A new 0.1× speed plays without music.",
+      ]},
+      { tag: "changed", items: [
+        "Frame stepping (<b>,</b> / <b>.</b>) now walks the frames of both replays, so it never skips a frame of the second player.",
+      ]},
+    ],
+  },
   {
     ver: "3.1", name: "A new look", date: "2026-11-04",
     changes: [
@@ -343,6 +359,28 @@ function drawTimeline() {
     for (const b of d.bad) if (b.j === 0) g.fillRect(Math.round(X(b.t)) - 1, gy0, 2, gy1 - gy0);
   }
 
+  // two replays: shade the gap between the curves in the leader's colour
+  if (RD.length === 2 && RD[0].evs.length && RD[1].evs.length) {
+    const [A, B] = RD;
+    let i = 0, j = 0, a = 100, b = 100, t = t0;
+    while (i < A.evs.length || j < B.evs.length) {
+      const ta = i < A.evs.length ? A.evs[i][0] : Infinity, tb = j < B.evs.length ? B.evs[j][0] : Infinity;
+      const tn = Math.min(ta, tb);
+      if (Math.abs(a - b) > 1e-6) {
+        g.fillStyle = rgba(PLAYER_COLORS[a > b ? A.slot : B.slot], .16);
+        const y0 = Y(Math.max(a, b)), y1 = Y(Math.min(a, b));
+        g.fillRect(X(t), y0, X(tn) - X(t), y1 - y0);
+      }
+      t = tn;
+      if (ta === tn) a = A.evs[i++][3];
+      if (tb === tn) b = B.evs[j++][3];
+    }
+    if (Math.abs(a - b) > 1e-6) {
+      g.fillStyle = rgba(PLAYER_COLORS[a > b ? A.slot : B.slot], .16);
+      g.fillRect(X(t), Y(Math.max(a, b)), X(t1) - X(t), Y(Math.min(a, b)) - Y(Math.max(a, b)));
+    }
+  }
+
   // accuracy lines with a soft fill
   for (const d of RD) {
     const col = PLAYER_COLORS[d.slot];
@@ -415,7 +453,14 @@ function timelineTip(e) {
     const ev = i >= 0 ? d.evs[i] : null;
     return `<div><i style="background:${rgba(PLAYER_COLORS[d.slot], 1)}"></i>${escapeHtml(d.r.player)}<span>${ev ? ev[3].toFixed(2) : "100.00"}% · ${ev ? ev[2] : 0}x</span></div>`;
   }).join("");
-  tip.innerHTML = `<b>${relTime(near ? near.t : t)}</b>${near ? `<em class="jt j${near.j}">${JNAME[near.j]} · ${escapeHtml(S.replays[near.slot].player)}</em>` : ""}${rows}<small>click to watch</small>`;
+  let lead = "";
+  if (RD.length === 2) {
+    const accOf = d => { const i = upperBound(d.evs, t) - 1; return i >= 0 ? d.evs[i][3] : 100; };
+    const diff = accOf(RD[0]) - accOf(RD[1]);
+    lead = Math.abs(diff) < 0.005 ? `<div>dead even</div>`
+      : `<div>${escapeHtml(RD[diff > 0 ? 0 : 1].r.player)} leads<span>+${Math.abs(diff).toFixed(2)}%</span></div>`;
+  }
+  tip.innerHTML = `<b>${relTime(near ? near.t : t)}</b>${near ? `<em class="jt j${near.j}">${JNAME[near.j]} · ${escapeHtml(S.replays[near.slot].player)}</em>` : ""}${rows}${lead}<small>click to watch</small>`;
   tip.classList.remove("hidden");
   const tw = tip.offsetWidth;
   tip.style.left = clamp(x + 14, 4, r.width - tw - 4) + "px";
@@ -565,7 +610,7 @@ function watchAt(t) {
   setPlaying(true);
 }
 
-function drawCharts() { drawTimeline(); drawHist(); drawField(); }
+function drawCharts() { drawTimeline(); drawDuel(); drawHist(); drawField(); }
 let chartsBound = false;
 function bindCharts() {
   if (chartsBound) return;
@@ -596,6 +641,8 @@ export function showResults() {
   $("results-modal").classList.remove("hidden");
   $("results-modal").querySelector(".modal-card").scrollTop = 0;
   bindCharts();
+  buildDuel();
+  renderDuel(watchAt);
   renderMisses();
   requestAnimationFrame(drawCharts);
 

@@ -5,7 +5,8 @@ import { SPEED_OPTS, APP_VERSION, ICONS } from "./config.js";
 import { $, S, OPT, SKIN, toast, chip, landing, player, canvas, saveSettings, resetOptions } from "./core.js";
 import { loadSkin, removeSkin } from "./skin.js";
 import { handleFiles, clearSession, goLanding, enterPlayer, loadSkinFile } from "./session.js";
-import { setPlaying, seekTo, setSpeed, stepFrame, skipIntro, syncAudio } from "./playback.js";
+import { setPlaying, seekTo, setSpeed, stepFrame, stepNote, jumpMiss, toggleSlowMo, skipIntro, syncAudio } from "./playback.js";
+import { bindSeekHover } from "./timeline.js";
 import {
   openSettings, closeSettings, bindSettings, applySettings,
   startParticles, sizeParticles,
@@ -75,6 +76,9 @@ $("btn-play").onclick = () => setPlaying(!S.playing);
 $("btn-restart").onclick = () => { seekTo(S.origin); setPlaying(true); };
 $("btn-step-b").onclick = () => stepFrame(-1);
 $("btn-step-f").onclick = () => stepFrame(1);
+const missJump = dir => { if (!jumpMiss(dir)) toast(dir > 0 ? "No more misses after this point." : "No miss before this point.", "info", 1800); };
+$("btn-miss-prev").onclick = () => missJump(-1);
+$("btn-miss-next").onclick = () => missJump(1);
 $("btn-skip").onclick = skipIntro;
 $("btn-mode").onclick = toggleMode;
 $("btn-stats").onclick = toggleStats;
@@ -124,6 +128,7 @@ const endSeek = () => { if (!S.seeking) return; S.seeking = false; seekTo(seekVa
 seekEl.addEventListener("change", endSeek);
 window.addEventListener("pointerup", endSeek);
 window.addEventListener("pointercancel", endSeek);
+bindSeekHover();
 
 /* click canvas to pause/resume (nice on touch) */
 canvas.addEventListener("click", () => { if (inPlayer()) setPlaying(!S.playing); });
@@ -152,6 +157,8 @@ document.addEventListener("keydown", e => {
     if (e.code === "Enter" && !$("btn-watch").classList.contains("disabled") && e.target.tagName !== "BUTTON") enterPlayer();
     return;
   }
+  // layout-independent fallbacks for the bracket keys
+  if ((e.key === "[" || e.key === "]") && e.code !== "BracketLeft" && e.code !== "BracketRight") { missJump(e.key === "]" ? 1 : -1); return; }
   switch (e.code) {
     case "Space": e.preventDefault(); setPlaying(!S.playing); break;
     case "KeyR": seekTo(S.origin); setPlaying(true); break;
@@ -160,8 +167,11 @@ document.addEventListener("keydown", e => {
     case "Tab": e.preventDefault(); toggleMode(); break;
     case "ArrowLeft": seekTo(S.t - 5000); break;
     case "ArrowRight": seekTo(S.t + 5000); break;
-    case "Comma": stepFrame(-1); break;
-    case "Period": stepFrame(1); break;
+    case "Comma": if (e.shiftKey) stepNote(-1); else stepFrame(-1); break;
+    case "Period": if (e.shiftKey) stepNote(1); else stepFrame(1); break;
+    case "BracketLeft": missJump(-1); break;
+    case "BracketRight": missJump(1); break;
+    case "KeyQ": toggleSlowMo(); break;
     case "Minus": case "NumpadSubtract": { const i = SPEED_OPTS.indexOf(S.speed); setSpeed(SPEED_OPTS[Math.max(0, (i < 0 ? 3 : i) - 1)]); break; }
     case "Equal": case "NumpadAdd": { const i = SPEED_OPTS.indexOf(S.speed); setSpeed(SPEED_OPTS[Math.min(SPEED_OPTS.length - 1, (i < 0 ? 3 : i) + 1)]); break; }
     case "KeyF": $("btn-full").click(); break;

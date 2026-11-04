@@ -179,7 +179,7 @@ def events_json(r, bm: Beatmap, slot: int) -> dict:
     for e in evs[1:]:   # skip the -inf sentinel
         out.append([round(e.time, 1), e.score, e.combo, round(e.acc, 2),
                     e.judgment, round(e.x, 1), round(e.y, 1), round(e.dt, 1),
-                    e.n300, e.n100, e.n50, e.nmiss])
+                    e.n300, e.n100, e.n50, e.nmiss, round(e.obj_time, 1)])
     _, _, od = mods_mod.adjusted_difficulty(bm.cs, bm.ar, bm.od, r.mods)
     w300, w100, w50 = mods_mod.hit_windows(od, r.mods)
     return {"slot": slot, "events": out,
