@@ -35,8 +35,9 @@ const extOf = name => name.toLowerCase().slice(name.lastIndexOf("."));
 export async function loadSkinFile(file) {
   chip("chip-skin", "loading " + file.name + "…", "busy");
   try {
-    const sk = await useSkinFile(file);
-    toast(`Skin loaded: ${sk.name}`, "ok");
+    const { skin, saved } = await useSkinFile(file);
+    if (saved) toast(`Skin loaded: ${skin.name} — added to your skin library`, "ok");
+    else toast(`Skin loaded: ${skin.name}, but your browser had no room to keep it for next time.`, "warn", 6000);
   } catch (e) {
     toast("Couldn't read this skin: " + e.message, "error");
   }

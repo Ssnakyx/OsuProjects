@@ -12,6 +12,15 @@ import { buildDuel, renderDuel, drawDuel } from "./compare.js";
 
 const PATCH_NOTES = [
   {
+    ver: "3.3", name: "Clips & skin library", date: "2026-11-04",
+    changes: [
+      { tag: "added", items: [
+        "<b>Export a clip</b> (camera button or <b>E</b> in the player): save a moment or the whole replay as a <b>video</b> (MP4 where your browser supports it, WebM otherwise, 720p or 1080p, with music and hit sounds) or as a looping <b>GIF</b> (up to 20 s). Presets for the whole replay or the 10 seconds around the current moment, an optional score overlay, and a preview before you download.",
+        "<b>Skin library</b>: every .osk you load is kept in your browser. Pick one in Settings → Skin (or click the skin chip on the menu) to switch in one click, press <b>K</b> in the player to cycle through them, and delete the ones you no longer want.",
+      ]},
+    ],
+  },
+  {
     ver: "3.2", name: "Head to head", date: "2026-11-04",
     changes: [
       { tag: "added", items: [

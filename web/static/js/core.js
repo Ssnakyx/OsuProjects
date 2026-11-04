@@ -89,6 +89,7 @@ export const S = {
   mode: "overlay",
   hitIdx: 0, seeking: false, mapFetching: false,
   ended: false,
+  exportView: null,            // { w, h, dpr } while export.js renders a clip
   fps: 0, fpsAcc: 0, fpsN: 0,
 };
 
