@@ -173,22 +173,6 @@ document.addEventListener("keydown", e => {
   }
 });
 
-/* ── ripple effect on primary buttons ──────────────────────────────── */
-
-document.addEventListener("pointerdown", e => {
-  const b = e.target.closest(".btn");
-  if (!b) return;
-  const r = b.getBoundingClientRect();
-  const size = Math.max(r.width, r.height);
-  const s = document.createElement("span");
-  s.className = "ripple";
-  s.style.width = s.style.height = size + "px";
-  s.style.left = (e.clientX - r.left - size / 2) + "px";
-  s.style.top = (e.clientY - r.top - size / 2) + "px";
-  b.appendChild(s);
-  setTimeout(() => s.remove(), 600);
-});
-
 /* ── boot ──────────────────────────────────────────────────────────── */
 
 document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.dataset.ic] || ""; });

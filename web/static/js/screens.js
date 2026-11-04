@@ -9,6 +9,17 @@ import { triLayer } from "./landing-fx.js";
 
 const PATCH_NOTES = [
   {
+    ver: "3.1", name: "A new look", date: "2026-11-04",
+    changes: [
+      { tag: "changed", items: [
+        "<b>New design</b> inspired by modern rhythm-game menus: sheared buttons and bars, drifting triangles in the background, overlay-style panels and the <b>Outfit</b> typeface.",
+        "The accent colour in Settings now tints the <b>whole interface</b>, not just the buttons.",
+        "Settings open as a side panel; sliders and switches have a new style.",
+        "Mods in the HUD are coloured by type (difficulty reduction, increase, automation…).",
+      ]},
+    ],
+  },
+  {
     ver: "3.0", name: "Skins everywhere & a new look", date: "2026-11-03",
     changes: [
       { tag: "added", items: [

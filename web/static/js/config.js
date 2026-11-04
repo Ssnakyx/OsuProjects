@@ -3,7 +3,7 @@
 export const COMBO_COLORS = [
   [255, 102, 170], [92, 200, 255], [255, 196, 64], [126, 230, 150],
 ];
-export const PLAYER_COLORS = [[255, 95, 162], [76, 201, 255]];
+export const PLAYER_COLORS = [[255, 102, 171], [102, 204, 255]];
 export const JUDGE_COLORS = { 300: [92, 200, 255], 100: [62, 224, 143], 50: [255, 207, 74], 0: [255, 84, 104] };
 
 export const JUDGE_POPUP_MS = 650;
@@ -28,13 +28,14 @@ export const ICONS = {
   sfx:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M17 8.5a4.5 4.5 0 0 1 0 7"/></svg>',
 };
 
+// `hue` tints every surface of the UI (CSS --h), like a lazer overlay colour scheme.
 export const ACCENTS = {
-  pink:   { main: "#ff5fa2", dark: "#d9437f", glow: "rgba(255,95,162,.38)",  soft: "rgba(255,95,162,.13)" },
-  blue:   { main: "#5b8cff", dark: "#3f69d6", glow: "rgba(91,140,255,.38)",  soft: "rgba(91,140,255,.13)" },
-  green:  { main: "#3ee08f", dark: "#22b56d", glow: "rgba(62,224,143,.36)",  soft: "rgba(62,224,143,.12)" },
-  purple: { main: "#a77bff", dark: "#8257e0", glow: "rgba(167,123,255,.38)", soft: "rgba(167,123,255,.13)" },
-  orange: { main: "#ff9b42", dark: "#e07722", glow: "rgba(255,155,66,.36)",  soft: "rgba(255,155,66,.12)" },
-  red:    { main: "#ff5468", dark: "#d63a4d", glow: "rgba(255,84,104,.38)",  soft: "rgba(255,84,104,.13)" },
+  pink:   { hue: 333, main: "#ff66ab", dark: "#db4a8c", glow: "rgba(255,102,171,.4)",  soft: "rgba(255,102,171,.14)" },
+  blue:   { hue: 222, main: "#6694ff", dark: "#4a72db", glow: "rgba(102,148,255,.4)",  soft: "rgba(102,148,255,.14)" },
+  green:  { hue: 140, main: "#66e68c", dark: "#43c06a", glow: "rgba(102,230,140,.36)", soft: "rgba(102,230,140,.13)" },
+  purple: { hue: 262, main: "#a07aff", dark: "#7f58e0", glow: "rgba(160,122,255,.4)",  soft: "rgba(160,122,255,.14)" },
+  orange: { hue: 30,  main: "#ffa366", dark: "#e07f3e", glow: "rgba(255,163,102,.38)", soft: "rgba(255,163,102,.13)" },
+  red:    { hue: 356, main: "#ff6673", dark: "#db4653", glow: "rgba(255,102,115,.4)",  soft: "rgba(255,102,115,.14)" },
 };
 
 export const DEFAULTS = {
@@ -51,4 +52,4 @@ export const OPT_UNIT = { bgDim: "%", bgBlur: "px", cursorScale: "%", trail: "%"
 
 // Bump APP_VERSION whenever a release is added to the top of PATCH_NOTES;
 // the "what's new" modal then auto-opens once for returning visitors.
-export const APP_VERSION = "3.0";
+export const APP_VERSION = "3.1";

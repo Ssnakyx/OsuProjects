@@ -185,7 +185,7 @@ export function enterPlayer() {
       const ms = r.modsStr || "";
       for (let k = 0; k < ms.length; k += 2) {
         const chip = document.createElement("span");
-        chip.className = "mod";
+        chip.className = "mod mod-" + ms.slice(k, k + 2);
         chip.textContent = ms.slice(k, k + 2);
         modsEl.appendChild(chip);
       }
