@@ -108,6 +108,15 @@ def test_hit_on_stacked_position(tmp_path):
     assert [e.time for e in evs[1:]] == sorted(e.time for e in evs[1:])
 
 
+def test_events_carry_their_note_time(tmp_path):
+    # hit late on note 1, too-early miss on note 2, never clicked note 3
+    objs = "100,100,1000,1,0\n300,100,2000,1,0\n400,300,3000,1,0"
+    bm = load_beatmap(write_osu(tmp_path / "m.osu", objs))
+    evs = compute_live_scores(_replay([(1010, 100, 100), (1700, 300, 100)]), bm)
+    assert [e.obj_time for e in evs[1:]] == [1000.0, 2000.0, 3000.0]
+    assert [e.judgment for e in evs[1:]] == [300, 0, 0]
+
+
 def test_dt_windows_are_in_song_time():
     w300, _, _ = M.hit_windows(8, M.DT)
     assert w300 == pytest.approx((80 - 48) * 1.5)
@@ -140,4 +149,5 @@ def test_json_payloads(fixtures):
     assert {o["k"] for o in m["objects"]} == {"c", "s", "p"}
     ev = webjson.events_json(rp, bm, 0)
     assert len(ev["events"]) == 6 and len(ev["windows"]) == 3
+    assert all(len(e) == 13 for e in ev["events"])   # last field = note time
     assert webjson.replay_json(rp, 0)["player"] == "alice"

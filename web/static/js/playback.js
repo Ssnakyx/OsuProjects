@@ -7,6 +7,13 @@ import { ICONS } from "./config.js";
 import { draw } from "./render.js";
 import { drawStats, updateHUD } from "./stats.js";
 import { showResults } from "./screens.js";
+import { drawTimeline, missTarget, noteTarget } from "./timeline.js";
+
+/* Below this rate the music is muted: browsers either refuse such slow
+   playback rates or play them silently / garbled. The replay keeps running
+   on its own clock and hit sounds still fire. */
+const MIN_AUDIO_RATE = 0.25;
+let slowPrev = null;      // speed to restore when leaving the Q slow-motion
 
 /* ── hit sounds (WebAudio) ─────────────────────────────────────────── */
 
@@ -60,8 +67,8 @@ export function syncAudio(force) {
   const a = S.audio;
   if (!a) return;
   const target = S.t / 1000;
-  if (!S.playing || target < 0 || (a.duration && target >= a.duration)) { if (!a.paused) a.pause(); return; }
-  a.playbackRate = S.speed;
+  if (!S.playing || target < 0 || (a.duration && target >= a.duration) || S.speed < MIN_AUDIO_RATE) { if (!a.paused) a.pause(); return; }
+  try { a.playbackRate = S.speed; } catch (e) {}
   if (force || a.paused || Math.abs(a.currentTime - target) > 0.12) {
     try { a.currentTime = Math.max(0, target); } catch (e) {}
     a.play().then(() => { S.audioBlocked = false; }).catch(() => { S.audioBlocked = true; });
@@ -79,17 +86,49 @@ export function seekTo(t) {
 export function setSpeed(v) {
   S.speed = v;
   $("speed").value = String(v);
-  if (S.audio) S.audio.playbackRate = v;
+  if (S.audio && v >= MIN_AUDIO_RATE) { try { S.audio.playbackRate = v; } catch (e) {} }
+  if (v !== 0.25) slowPrev = null;
+  syncAudio(false);   // resumes the music when coming back from a muted rate
 }
 
+/* Q: toggle 0.25× slow motion, then back to whatever speed was set before. */
+export function toggleSlowMo() {
+  if (slowPrev !== null && S.speed === 0.25) { const back = slowPrev; slowPrev = null; setSpeed(back); return; }
+  const prev = S.speed;
+  setSpeed(0.25);
+  slowPrev = prev === 0.25 ? 1 : prev;
+}
+
+/* One replay frame forward / back. Frames are merged across both replays
+   so stepping never skips a frame of the second player. */
 export function stepFrame(dir) {
   setPlaying(false);
-  const r = S.replays[0] || S.replays[1];
-  if (!r || !r.frames.length) return;
-  const f = r.frames;
-  let i = frameIndexAt(f, S.t);
-  i = clamp(i + dir, 0, f.length - 1);
-  seekTo(f[i][0]);
+  let best = null;
+  for (const r of S.replays) {
+    if (!r || !r.frames.length) continue;
+    const f = r.frames;
+    let i = frameIndexAt(f, S.t);
+    if (dir > 0) { while (i < f.length && f[i][0] <= S.t + 0.01) i++; if (i >= f.length) continue; }
+    else { while (i >= 0 && f[i][0] >= S.t - 0.01) i--; if (i < 0) continue; }
+    const t = f[i][0];
+    if (best === null || (dir > 0 ? t < best : t > best)) best = t;
+  }
+  if (best !== null) seekTo(best);
+}
+
+/* Shift + , / . : land exactly on the previous / next hit object. */
+export function stepNote(dir) {
+  setPlaying(false);
+  const t = noteTarget(dir);
+  if (t !== null) seekTo(t);
+}
+
+/* [ / ] : jump to the previous / next miss (just before the note appears). */
+export function jumpMiss(dir) {
+  const t = missTarget(dir);
+  if (t === null) return false;
+  seekTo(t);
+  return true;
 }
 
 export function skipIntro() {
@@ -139,6 +178,7 @@ export function tick(now) {
   try {
     draw();
     updateHUD();
+    drawTimeline();
     if (!$("stats-panel").classList.contains("hidden")) drawStats();
   } catch (e) { console.error(e); }
 }

@@ -13,6 +13,7 @@ import { prepStats } from "./stats.js";
 import { setPlaying, setSpeed, initSfx, tick } from "./playback.js";
 import { applySettings, startParticles, stopParticles } from "./settings.js";
 import { saveRecentReplays } from "./recent.js";
+import { prepareTimeline } from "./timeline.js";
 
 /* ── file intake ───────────────────────────────────────────────────── */
 
@@ -172,6 +173,7 @@ export function enterPlayer() {
   const lastFrame = Math.max(0, ...S.replays.filter(Boolean).map(r => r.frames.length ? r.frames[r.frames.length - 1][0] : 0));
   const lastObj = objs.reduce((m, o) => Math.max(m, o.endT), 0);
   S.endT = Math.max(lastObj + 1500, Math.min(lastFrame, lastObj + 6000), S.origin + 1);
+  prepareTimeline();
 
   for (const slot of [0, 1]) {
     const r = S.replays[slot];

@@ -28,6 +28,9 @@ class ScoreEvent:
     n100:     int
     n50:      int
     nmiss:    int
+    # Time of the hit object this event judges (NaN for the sentinel), so
+    # two replays can be compared note by note.
+    obj_time: float = float('nan')
 
 
 def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
@@ -83,19 +86,19 @@ def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
             return 100.0
         return 100.0 * (300 * n300 + 100 * n100 + 50 * n50) / (300 * total)
 
-    def miss(at: float, x: float, y: float) -> None:
+    def miss(at: float, x: float, y: float, ot: float) -> None:
         nonlocal combo, nmiss
         combo = 0
         nmiss += 1
         events.append(ScoreEvent(at, score, 0, 0, x, y, 0.0, acc(),
-                                 n300, n100, n50, nmiss))
+                                 n300, n100, n50, nmiss, ot))
 
     cur = 0          # earliest unjudged object (note lock)
     for pt, px, py in presses:
         # Objects whose window closed before this press are misses.
         while cur < len(targets) and targets[cur][0] + win50 < pt:
             t0, ox, oy = targets[cur]
-            miss(t0 + win50, ox, oy)
+            miss(t0 + win50, ox, oy, t0)
             cur += 1
         if cur >= len(targets):
             break
@@ -106,7 +109,7 @@ def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
         if (px - ox) ** 2 + (py - oy) ** 2 > r2:
             continue                          # not on the note (note lock)
         if dt < -win50:
-            miss(pt, ox, oy)                  # clicked too early
+            miss(pt, ox, oy, t0)                # clicked too early
             cur += 1
             continue
         ad = abs(dt)
@@ -117,12 +120,12 @@ def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
         combo += 1
         score += round(hit_val * (1.0 + max(0, combo - 1) / 25.0))
         events.append(ScoreEvent(pt, score, combo, hit_val, ox, oy, dt, acc(),
-                                 n300, n100, n50, nmiss))
+                                 n300, n100, n50, nmiss, t0))
         cur += 1
 
     while cur < len(targets):
         t0, ox, oy = targets[cur]
-        miss(t0 + win50, ox, oy)
+        miss(t0 + win50, ox, oy, t0)
         cur += 1
 
     # Misses are appended at window close, hits at press time: keep the
@@ -146,7 +149,7 @@ def _recount(events: List[ScoreEvent]) -> List[ScoreEvent]:
         total = sum(n.values())
         acc = 100.0 * (300 * n[300] + 100 * n[100] + 50 * n[50]) / (300 * total)
         out.append(ScoreEvent(e.time, score, combo, e.judgment, e.x, e.y, e.dt,
-                              acc, n[300], n[100], n[50], n[0]))
+                              acc, n[300], n[100], n[50], n[0], e.obj_time))
     return out
 
 

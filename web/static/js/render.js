@@ -193,6 +193,7 @@ function drawField(f) {
   }
 
   if (OPT.showJudgments) for (const p of f.players) drawJudgments(p, tr, k, f.players.length);
+  if (OPT.cursorGap && f.players.length === 2) drawCursorGap(tr);
   for (const p of f.players) drawCursor(p, tr);
   if (OPT.showKeys) drawKeyOverlay(f);
 }
@@ -657,6 +658,35 @@ function drawPlayerHalo(x, y, r, color) {
   g.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+
+/* Overlay mode with two replays: a line joining both cursors and their
+   distance in osu! pixels, so you can see exactly where the aims diverge. */
+function drawCursorGap(tr) {
+  const [ax, ay] = cursorAt(S.replays[0].frames, S.t);
+  const [bx, by] = cursorAt(S.replays[1].frames, S.t);
+  const d = Math.hypot(bx - ax, by - ay);
+  if (d < 6) return;
+  const x0 = tx(tr, ax), y0 = ty(tr, ay), x1 = tx(tr, bx), y1 = ty(tr, by);
+  const a = clamp((d - 6) / 40, 0, 1) * .75;
+  const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+  grad.addColorStop(0, rgba(PLAYER_COLORS[0], a)); grad.addColorStop(1, rgba(PLAYER_COLORS[1], a));
+  ctx.save();
+  ctx.strokeStyle = grad; ctx.lineWidth = Math.max(1.2, tr.s * 1.1);
+  ctx.setLineDash([6 * tr.s, 5 * tr.s]);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.setLineDash([]);
+  if (d >= 24) {
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, lbl = Math.round(d) + " px";
+    ctx.font = `600 ${Math.round(clamp(10 * tr.s, 10, 14))}px Outfit, sans-serif`;
+    const w = ctx.measureText(lbl).width + 10, h = clamp(10 * tr.s, 10, 14) + 6;
+    ctx.fillStyle = `rgba(10,10,14,${.55 * a / .75 + .1})`;
+    roundRect(mx - w / 2, my - h / 2, w, h, 4); ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, a / .75 + .2)})`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(lbl, mx, my + .5);
+  }
+  ctx.restore();
 }
 
 function drawCursor(p, tr) {
