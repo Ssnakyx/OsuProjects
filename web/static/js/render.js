@@ -7,7 +7,7 @@
    built-in vector style, and anything the skin hides (1×1 image) stays hidden. */
 
 import {
-  rgba, clamp, S, SKIN, OPT, canvas, ctx, upperBound, cursorAt, keysAt,
+  rgba, clamp, S, SKIN, OPT, canvas, ctx, upperBound, cursorAt, keysAt, frameIndexAt,
 } from "./core.js";
 import {
   PLAYER_COLORS, JUDGE_COLORS, JUDGE_POPUP_MS, ERRORBAR_MS,
@@ -531,57 +531,113 @@ function drawSpinner(o, tr, k) {
   ctx.restore();
 }
 
-/* ── cursors ───────────────────────────────────────────────────────── */
+/* ── cursors ───────────────────────────────────────────────────────── *
+ * Skin cursor, osu!-style: `cursor` (+ CursorCentre / CursorRotate /
+ * CursorExpand), `cursormiddle` on top, and a `cursortrail` that is either
+ * discrete ghosts or — when the skin ships a cursormiddle — a dense "smooth"
+ * trail laid along the path. Each part falls back on its own: a missing
+ * cursor or trail gets the vector style, a 1×1 (hidden) trail means none.
+ * Trail sprites sit on an absolute time grid so they stay put between frames
+ * instead of shimmering as the window slides.
+ */
 
-function drawCursor(p, tr) {
-  const frames = S.replays[p].frames;
-  const color = PLAYER_COLORS[p];
-  const tint = (S.replays[0] && S.replays[1]) ? color : null;
-  const cMul = OPT.cursorScale / 100, tMul = OPT.trail / 100;
-  const pressed = (keysAt(frames, S.t) & 15) !== 0;
+const CURSOR_SPIN_MS = 10000;   // CursorRotate: one turn per 10 s
+const EXPAND_SCALE = 1.2, EXPAND_MS = 100;
 
-  if (has("cursor")) {
-    const ks = tr.s / 1.6 * cMul;
-    const smooth = has("cursormiddle");
-    if (tMul > 0 && has("cursortrail")) {
-      // smooth trail (with cursormiddle) = dense sprites; else discrete ghosts
-      const N = Math.round((smooth ? 28 : 8) * tMul), step = smooth ? 4 : 16;
-      for (let i = N; i > 0; i--) {
-        const [cx0, cy0] = cursorAt(frames, S.t - i * step);
-        drawEl(ctx, "cursortrail", tx(tr, cx0), ty(tr, cy0), ks, {
-          color: tint, alpha: Math.pow(1 - i / (N + 1), 1.2) * (smooth ? .5 : .8),
-        });
+const cursorRot = t => (SKIN.ini.cursorRotate ? (t / CURSOR_SPIN_MS) * Math.PI * 2 : 0);
+const easeOut = x => 1 - (1 - x) * (1 - x);
+
+/* [pressed, ms since the key state last changed] at time t. */
+function pressState(frames, t) {
+  if (!frames.length || t < frames[0][0]) return [false, 1e9];
+  const i = frameIndexAt(frames, t);
+  const on = (frames[i][3] & 15) !== 0;
+  for (let j = i; j > 0 && i - j < 60; j--) {
+    if (((frames[j - 1][3] & 15) !== 0) !== on) return [on, t - frames[j][0]];
+  }
+  return [on, 1e9];
+}
+
+function expandScale(frames) {
+  if (!SKIN.ini.cursorExpand) return 1;
+  const [on, age] = pressState(frames, S.t);
+  const k = easeOut(clamp(age / EXPAND_MS, 0, 1));
+  return 1 + (EXPAND_SCALE - 1) * (on ? k : 1 - k);
+}
+
+function skinTrailPoints(frames, tr, ks, tMul, smooth) {
+  const pts = [];                                  // [x, y, ageMs, time]
+  const life = 150 * tMul;
+  if (life <= 0) return pts;
+  if (!smooth) {
+    const g = 16;                                  // one ghost per ~frame
+    for (let t = Math.ceil((S.t - life) / g) * g; t < S.t; t += g) {
+      const [ox, oy] = cursorAt(frames, t);
+      pts.push([tx(tr, ox), ty(tr, oy), S.t - t, t]);
+    }
+    return pts;
+  }
+  const fr = frameOf("cursortrail");
+  const spacing = Math.max(1.5, fr.w * ks / 2.5);
+  const g = 4;
+  const times = [];
+  for (let t = Math.ceil((S.t - life) / g) * g; t < S.t; t += g) times.push(t);
+  times.push(S.t);
+  let prev = null, last = null;
+  for (const t of times) {
+    const [ox, oy] = cursorAt(frames, t);
+    const p = [tx(tr, ox), ty(tr, oy), S.t - t, t];
+    if (!prev) { pts.push(p); last = p; prev = p; continue; }
+    const d = Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+    if (d >= spacing) {
+      // fill the gap at even steps (depends only on the two grid points)
+      const n = Math.min(64, Math.ceil(d / spacing));
+      for (let j = 1; j <= n; j++) {
+        const f = j / n;
+        pts.push([prev[0] + (p[0] - prev[0]) * f, prev[1] + (p[1] - prev[1]) * f,
+          prev[2] + (p[2] - prev[2]) * f, prev[3] + (p[3] - prev[3]) * f]);
       }
+      last = p;
+    } else if (Math.hypot(p[0] - last[0], p[1] - last[1]) >= spacing) {
+      pts.push(p); last = p;
     }
-    const [cx0, cy0] = cursorAt(frames, S.t);
-    const x = tx(tr, cx0), y = ty(tr, cy0);
-    const expand = pressed && SKIN.ini.cursorExpand ? 1.2 : 1;
-    const rot = SKIN.ini.cursorRotate ? (S.t / 10000) * Math.PI * 2 : 0;
-    const fr = frameOf("cursor");
-    if (SKIN.ini.cursorCentre) drawEl(ctx, "cursor", x, y, ks, { color: tint, scale: expand, rot });
-    else drawEl(ctx, "cursor", x, y, ks, { color: tint, scale: expand, topLeft: true, frame: fr });
-    if (smooth) drawEl(ctx, "cursormiddle", x, y, ks, { color: tint });
-    return;
+    prev = p;
   }
+  return pts.length > 600 ? pts.slice(-600) : pts;
+}
 
-  const TRAIL = Math.round(22 * tMul);
-  const base = 9 * tr.s * 1.35 * cMul;
-  if (TRAIL > 1) {
-    ctx.save();
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    let prev = cursorAt(frames, S.t - TRAIL * 8);
-    for (let k2 = TRAIL - 1; k2 >= 0; k2--) {
-      const cur = cursorAt(frames, S.t - k2 * 8);
-      const f = 1 - k2 / TRAIL;
-      ctx.strokeStyle = rgba(color, f * .45);
-      ctx.lineWidth = Math.max(1, base * 1.1 * f);
-      ctx.beginPath(); ctx.moveTo(tx(tr, prev[0]), ty(tr, prev[1])); ctx.lineTo(tx(tr, cur[0]), ty(tr, cur[1])); ctx.stroke();
-      prev = cur;
-    }
-    ctx.restore();
+function drawSkinTrail(frames, tr, ks, tMul, tint) {
+  const smooth = has("cursormiddle");
+  const life = 150 * tMul;
+  const spin = SKIN.ini.cursorTrailRotate;
+  for (const [x, y, age, t] of skinTrailPoints(frames, tr, ks, tMul, smooth)) {
+    const f = 1 - age / life;
+    if (f <= 0) continue;
+    drawEl(ctx, "cursortrail", x, y, ks, {
+      color: tint, alpha: smooth ? Math.pow(f, 1.4) * .9 : f * .85,
+      rot: spin ? cursorRot(t) : 0,
+    });
   }
-  const [px, py] = cursorAt(frames, S.t);
-  const x = tx(tr, px), y = ty(tr, py);
+}
+
+function drawVectorTrail(frames, tr, color, base, tMul) {
+  const TRAIL = Math.round(22 * tMul);
+  if (TRAIL <= 1) return;
+  ctx.save();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  let prev = cursorAt(frames, S.t - TRAIL * 8);
+  for (let k2 = TRAIL - 1; k2 >= 0; k2--) {
+    const cur = cursorAt(frames, S.t - k2 * 8);
+    const f = 1 - k2 / TRAIL;
+    ctx.strokeStyle = rgba(color, f * .45);
+    ctx.lineWidth = Math.max(1, base * 1.1 * f);
+    ctx.beginPath(); ctx.moveTo(tx(tr, prev[0]), ty(tr, prev[1])); ctx.lineTo(tx(tr, cur[0]), ty(tr, cur[1])); ctx.stroke();
+    prev = cur;
+  }
+  ctx.restore();
+}
+
+function drawVectorHead(x, y, color, base, pressed) {
   const cr = Math.max(5, base) * (pressed ? 1.18 : 1);
   ctx.save();
   ctx.shadowColor = rgba(color, .9); ctx.shadowBlur = 16;
@@ -590,6 +646,50 @@ function drawCursor(p, tr) {
   ctx.lineWidth = 2; ctx.strokeStyle = "#fff";
   ctx.beginPath(); ctx.arc(x, y, cr, 0, Math.PI * 2); ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+}
+
+/* Player-coloured glow under a skin cursor, so two identical skin cursors
+   stay tellable apart without recolouring the skin itself. */
+function drawPlayerHalo(x, y, r, color) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, rgba(color, .55));
+  g.addColorStop(.55, rgba(color, .25));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawCursor(p, tr) {
+  const frames = S.replays[p].frames;
+  const color = PLAYER_COLORS[p];
+  const duo = !!(S.replays[0] && S.replays[1]);
+  const cMul = OPT.cursorScale / 100, tMul = OPT.trail / 100;
+  const ks = tr.s / 1.6 * cMul;                    // osu! sprites are sized for a 768-px-tall screen
+  const base = 9 * tr.s * 1.35 * cMul;             // vector cursor radius
+
+  // trail: skin sprite → vector fallback when absent → nothing when hidden
+  if (tMul > 0) {
+    if (has("cursortrail")) drawSkinTrail(frames, tr, ks, tMul, duo ? color : null);
+    else if (!hidden("cursortrail")) drawVectorTrail(frames, tr, color, base, tMul);
+  }
+
+  const [ox, oy] = cursorAt(frames, S.t);
+  const x = tx(tr, ox), y = ty(tr, oy);
+  const head = has("cursor"), middle = has("cursormiddle");
+  if (!head && !middle) {
+    drawVectorHead(x, y, color, base, (keysAt(frames, S.t) & 15) !== 0);
+    return;
+  }
+  const ex = expandScale(frames);
+  if (duo) {
+    const fr = frameOf(head ? "cursor" : "cursormiddle");
+    drawPlayerHalo(x, y, Math.max(14, Math.max(fr.w, fr.h) * ks * .55 * ex), color);
+  }
+  if (head) {
+    if (SKIN.ini.cursorCentre) drawEl(ctx, "cursor", x, y, ks, { scale: ex, rot: cursorRot(S.t) });
+    else drawEl(ctx, "cursor", x, y, ks, { scale: ex, topLeft: true });
+  }
+  if (middle) drawEl(ctx, "cursormiddle", x, y, ks);
 }
 
 /* ── judgments / error bar / keys ──────────────────────────────────── */

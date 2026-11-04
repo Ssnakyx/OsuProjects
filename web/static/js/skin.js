@@ -73,7 +73,7 @@ export function parseIni(text) {
   const ini = {
     name: "", author: "", combo: {}, sliderBorder: null, sliderTrack: null, sliderBall: null,
     hitCirclePrefix: "default", hitCircleOverlap: -2,
-    cursorRotate: true, cursorExpand: true, cursorCentre: true,
+    cursorRotate: true, cursorExpand: true, cursorCentre: true, cursorTrailRotate: true,
     allowSliderBallTint: false, sliderBallFlip: true, hitCircleOverlayAboveNumber: true,
     animationFramerate: -1, version: "1.0",
   };
@@ -94,6 +94,7 @@ export function parseIni(text) {
       else if (k === "cursorrotate") ini.cursorRotate = bool;
       else if (k === "cursorexpand") ini.cursorExpand = bool;
       else if (k === "cursorcentre") ini.cursorCentre = bool;
+      else if (k === "cursortrailrotate") ini.cursorTrailRotate = bool;
       else if (k === "allowsliderballtint") ini.allowSliderBallTint = bool;
       else if (k === "sliderballflip") ini.sliderBallFlip = bool;
       else if (k === "hitcircleoverlayabovenumber" || k === "hitcircleoverlayabovenumer") ini.hitCircleOverlayAboveNumber = bool;
