@@ -1,7 +1,7 @@
 /* Transport: play/pause, seeking, speed, frame stepping, hit-sound firing,
    audio sync and the main requestAnimationFrame loop (`tick`). */
 
-import { $, S, OPT, clamp, upperBound, frameIndexAt } from "./core.js";
+import { $, S, OPT, SKIN, clamp, upperBound, frameIndexAt } from "./core.js";
 import { api } from "./api.js";
 import { ICONS } from "./config.js";
 import { draw } from "./render.js";
@@ -11,7 +11,7 @@ import { showResults } from "./screens.js";
 /* ── hit sounds (WebAudio) ─────────────────────────────────────────── */
 
 export function initSfx() {
-  if (S.actx) return;
+  if (S.actx) { loadSkinHitsound(); return; }
   try {
     S.actx = new (window.AudioContext || window.webkitAudioContext)();
     S.sfxGain = S.actx.createGain();
@@ -21,14 +21,30 @@ export function initSfx() {
       .then(b => b ? S.actx.decodeAudioData(b) : Promise.reject())
       .then(buf => { S.hitBuf = buf; })
       .catch(() => {});
+    loadSkinHitsound();
   } catch (e) {}
 }
 
+/* Decode the skin's normal-hitnormal (if it has one) so hits sound like
+   the player's own skin. Re-run whenever the skin changes. */
+let skinSndSrc = null;
+export function loadSkinHitsound() {
+  if (!S.actx) return;
+  const bytes = SKIN.present ? SKIN.hitsound : null;
+  if (bytes === skinSndSrc) return;
+  skinSndSrc = bytes;
+  S.skinHitBuf = null;
+  if (!bytes) return;
+  S.actx.decodeAudioData(bytes.slice(0)).then(buf => { if (skinSndSrc === bytes) S.skinHitBuf = buf; }).catch(() => {});
+}
+document.addEventListener("skinchange", loadSkinHitsound);
+
 function playHitSound() {
-  if (!S.hitBuf || !S.actx) return;
+  const buf = (OPT.useSkin && S.skinHitBuf) || S.hitBuf;
+  if (!buf || !S.actx) return;
   if (S.actx.state === "suspended") S.actx.resume();
   const src = S.actx.createBufferSource();
-  src.buffer = S.hitBuf; src.connect(S.sfxGain); src.start();
+  src.buffer = buf; src.connect(S.sfxGain); src.start();
 }
 
 /* ── transport ─────────────────────────────────────────────────────── */
@@ -95,6 +111,8 @@ function fireHitSounds() {
 /* ── frame loop ────────────────────────────────────────────────────── */
 
 export function tick(now) {
+  // schedule first: an exception while drawing must never stop the loop
+  requestAnimationFrame(tick);
   const dt = now - S.lastNow;
   if (S.playing && !S.seeking) {
     S.t += dt * S.speed;
@@ -118,8 +136,9 @@ export function tick(now) {
     if (S.fpsAcc >= 500) { S.fps = Math.round(1000 * S.fpsN / S.fpsAcc); S.fpsAcc = 0; S.fpsN = 0; $("fps").textContent = S.fps + " fps"; }
   }
 
-  draw();
-  updateHUD();
-  if (!$("stats-panel").classList.contains("hidden")) drawStats();
-  requestAnimationFrame(tick);
+  try {
+    draw();
+    updateHUD();
+    if (!$("stats-panel").classList.contains("hidden")) drawStats();
+  } catch (e) { console.error(e); }
 }

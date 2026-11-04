@@ -62,6 +62,8 @@ class Beatmap:
     audio_filename: str = ""   # from [General] AudioFilename
     background:     str = ""   # from [Events] — image filename, may be empty
     beatmapset_id:  int = 0
+    stack_leniency: float = 0.7
+    format_version: int = 14
 
     hp:    float = 5.0
     cs:    float = 5.0
@@ -95,6 +97,89 @@ class Beatmap:
         return 54.4 - 4.48 * self.cs
 
 
+def end_time(obj: HitObject) -> float:
+    """Time (ms) at which a hit object ends."""
+    if isinstance(obj, Slider):
+        return obj.time + obj.duration
+    if isinstance(obj, Spinner):
+        return float(obj.end_time)
+    return float(obj.time)
+
+
+def end_position(obj: HitObject) -> Tuple[float, float]:
+    """Where the object ends (slider tail after its last repeat)."""
+    if isinstance(obj, Slider) and obj.path:
+        return obj.path[-1] if obj.slides % 2 == 1 else obj.path[0]
+    return (obj.x, obj.y)
+
+
+def compute_stack_heights(bm: "Beatmap", preempt: float) -> List[int]:
+    """osu! stacking (file format v6+), as in osu!lazer's OsuBeatmapProcessor.
+
+    Objects placed on (almost) the same spot shortly after each other are
+    drawn — and must be clicked — slightly up-left of each other. Returns the
+    stack height of every object; the on-screen offset of an object is
+    ``-height * radius / 10`` on both axes (y is mirrored under Hard Rock).
+    """
+    objs = bm.hit_objects
+    n_obj = len(objs)
+    heights = [0] * n_obj
+    if n_obj == 0:
+        return heights
+    threshold = preempt * bm.stack_leniency
+    stack_dist = 3.0
+
+    def dist(a, b) -> float:
+        return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+    if bm.format_version < 6:
+        return heights   # old maps use a different (rare) algorithm
+
+    for i in range(n_obj - 1, 0, -1):
+        n = i
+        ii = i
+        if heights[ii] != 0 or isinstance(objs[ii], Spinner):
+            continue
+        if isinstance(objs[ii], Slider):
+            while n - 1 >= 0:
+                n -= 1
+                on = objs[n]
+                if isinstance(on, Spinner):
+                    continue
+                if objs[ii].time - on.time > threshold:
+                    break
+                if dist(end_position(on), (objs[ii].x, objs[ii].y)) < stack_dist:
+                    heights[n] = heights[ii] + 1
+                    ii = n
+        else:
+            while n - 1 >= 0:
+                n -= 1
+                on = objs[n]
+                if isinstance(on, Spinner):
+                    continue
+                if objs[ii].time - end_time(on) > threshold:
+                    break
+                if isinstance(on, Slider) and dist(end_position(on), (objs[ii].x, objs[ii].y)) < stack_dist:
+                    offset = heights[ii] - heights[n] + 1
+                    for j in range(n + 1, i + 1):
+                        if dist(end_position(on), (objs[j].x, objs[j].y)) < stack_dist:
+                            heights[j] -= offset
+                    break
+                if dist((on.x, on.y), (objs[ii].x, objs[ii].y)) < stack_dist:
+                    heights[n] = heights[ii] + 1
+                    ii = n
+    return heights
+
+
+def stack_offset(height: int, radius: float, hard_rock: bool = False) -> Tuple[float, float]:
+    """(dx, dy) to add to an object's position for its stack height.
+
+    Positions here are in the *unflipped* playfield (Hard Rock replays are
+    un-flipped when loaded), so under HR the vertical offset is mirrored."""
+    o = -height * radius / 10.0
+    return (o, -o if hard_rock else o)
+
+
 def build_combo_info(bm: "Beatmap", palette_size: int) -> Tuple[List[int], List[int]]:
     """Per-object (colour_index, combo_number) following new-combo flags."""
     color_idx: List[int] = []
@@ -117,17 +202,21 @@ def build_combo_info(bm: "Beatmap", palette_size: int) -> Tuple[List[int], List[
 # ---------------------------------------------------------------------------
 
 def _beat_and_velocity(tps: List[TimingPoint], t: float) -> Tuple[float, float]:
-    """Return (uninherited_beat_ms, velocity_multiplier) at time t."""
-    beat = 500.0
+    """Return (uninherited_beat_ms, velocity_multiplier) at time t.
+
+    Before the first red line, osu! uses that first red line's BPM."""
+    beat = next((tp.beat_length for tp in tps if not tp.inherited and tp.beat_length > 0), 500.0)
     vel  = 1.0
     for tp in tps:
         if tp.offset > t:
             break
         if not tp.inherited:
-            beat = tp.beat_length
+            if tp.beat_length > 0:
+                beat = tp.beat_length
             vel  = 1.0
-        else:
-            vel = -100.0 / tp.beat_length
+        elif tp.beat_length < 0:
+            # osu! clamps slider velocity to 0.1x … 10x
+            vel = min(10.0, max(0.1, -100.0 / tp.beat_length))
     return beat, vel
 
 
@@ -143,16 +232,30 @@ def load_beatmap(path: str) -> Beatmap:
 
     section = None
     for raw in text.splitlines():
-        line = raw.strip()
+        line = raw.strip().lstrip('\ufeff')
         if not line or line.startswith('//'):
+            continue
+        if section is None and line.startswith('osu file format v'):
+            try:
+                bm.format_version = int(line[len('osu file format v'):].strip())
+            except ValueError:
+                pass
             continue
         if line.startswith('[') and line.endswith(']'):
             section = line[1:-1]
+            if section == 'HitObjects':
+                # stable sort: a green line on the same ms as a red line wins
+                bm.timing_points.sort(key=lambda tp: tp.offset)
             continue
 
         if section == 'General':
             if line.startswith('AudioFilename:'):
                 bm.audio_filename = line[14:].strip()
+            elif line.startswith('StackLeniency:'):
+                try:
+                    bm.stack_leniency = float(line[14:].strip())
+                except ValueError:
+                    pass
 
         elif section == 'Metadata':
             if   line.startswith('Title:'):   bm.title   = line[6:].strip()
@@ -166,11 +269,14 @@ def load_beatmap(path: str) -> Beatmap:
                     pass
 
         elif section == 'Events':
-            # Background line: 0,0,"bg.jpg",0,0
-            if not bm.background and line.startswith('0,0,'):
-                parts = line.split(',')
-                if len(parts) >= 3:
-                    bm.background = parts[2].strip().strip('"')
+            # Background line: 0,0,"bg.jpg",0,0  (or "Background,0,...")
+            parts = line.split(',')
+            if (not bm.background and len(parts) >= 3
+                    and parts[0].strip() in ('0', 'Background')):
+                name = parts[2].strip().strip('"')
+                if name and not name.lower().endswith(
+                        ('.avi', '.mp4', '.mkv', '.flv', '.wmv', '.mov', '.m4v')):
+                    bm.background = name
 
         elif section == 'Difficulty':
             if ':' not in line:
@@ -194,7 +300,11 @@ def load_beatmap(path: str) -> Beatmap:
             try:
                 offset = float(parts[0])
                 bl     = float(parts[1])
-                inherited = bl < 0
+                # Column 7 ("uninherited") is authoritative; old maps lack it.
+                if len(parts) >= 7 and parts[6].strip() in ('0', '1'):
+                    inherited = parts[6].strip() == '0'
+                else:
+                    inherited = bl < 0
                 bm.timing_points.append(TimingPoint(offset, bl, inherited))
             except ValueError:
                 pass
@@ -223,6 +333,7 @@ def load_beatmap(path: str) -> Beatmap:
                         if len(coords) == 2:
                             ctrl.append((float(coords[0]), float(coords[1])))
 
+                    slides = max(1, slides)
                     beat, vel = _beat_and_velocity(bm.timing_points, t)
                     duration  = (length / (bm.sm * 100.0 * vel)) * beat * slides
                     path      = compute_slider_path(ctype, ctrl, length)
@@ -241,4 +352,5 @@ def load_beatmap(path: str) -> Beatmap:
             except (ValueError, IndexError):
                 pass
 
+    bm.hit_objects.sort(key=lambda o: o.time)
     return bm

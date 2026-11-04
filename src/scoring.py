@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import bisect
 from dataclasses import dataclass
 from typing import List, Tuple
 
 from . import mods as mods_mod
+from .beatmap import compute_stack_heights, stack_offset
 
 
 @dataclass
@@ -33,21 +33,40 @@ class ScoreEvent:
 def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
     """Simulate hit detection for *replay* against *beatmap*.
 
-    Uses osu!-stable hit windows (mod-adjusted) and the classic combo
-    multiplier. Spinners are ignored; sliders are judged on the head only.
-    """
-    cs, _, od = mods_mod.adjusted_difficulty(beatmap.cs, beatmap.ar, beatmap.od, replay.mods)
-    win300, win100, win50 = mods_mod.hit_windows(od, replay.mods)
-    cr = mods_mod.circle_radius(cs)
+    Follows osu!stable's rules closely enough for a viewer:
 
-    # New-key-press events (bits 0-3 = M1/M2/K1/K2), sorted by time.
-    press_t:  List[float] = []
-    presses:  List[Tuple[float, float, float]] = []
+    * mod-adjusted hit windows and circle size, objects shifted by stacking;
+    * **note lock** — only the earliest unjudged object can be hit; clicking
+      a later one while it is still pending does nothing;
+    * clicking an object *too early* (before its 50 window but within the
+      400 ms miss window) is a miss;
+    * the classic combo multiplier for score.
+
+    Spinners are ignored and sliders are judged on their head only (no
+    ticks / ends), so totals are an approximation of the real score.
+    """
+    cs, ar, od = mods_mod.adjusted_difficulty(beatmap.cs, beatmap.ar, beatmap.od, replay.mods)
+    win300, win100, win50 = mods_mod.hit_windows(od, replay.mods)
+    rate = mods_mod.clock_rate(replay.mods)
+    win_miss = 400.0 * rate
+    radius = mods_mod.circle_radius(cs)
+    hard_rock = bool(replay.mods & mods_mod.HR)
+    heights = compute_stack_heights(beatmap, mods_mod.preempt_ms(ar))
+
+    # Judgeable objects (no spinners) with their stacked positions.
+    targets = []
+    for obj, h in zip(beatmap.hit_objects, heights):
+        if obj.is_spinner:
+            continue
+        dx, dy = stack_offset(h, radius, hard_rock)
+        targets.append((float(obj.time), obj.x + dx, obj.y + dy))
+
+    # New-key-press events (bits 0-3 = M1/M2/K1/K2), in time order.
+    presses: List[Tuple[float, float, float]] = []
     prev_keys = 0
     for frame in replay.frames:
         new = frame.keys & ~prev_keys & 0b1111
         if new:
-            press_t.append(frame.time)
             presses.append((frame.time, frame.x, frame.y))
         prev_keys = frame.keys
 
@@ -56,8 +75,7 @@ def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
     ]
     score = combo = 0
     n300 = n100 = n50 = nmiss = 0
-    used: set[int] = set()
-    r2 = (cr * 1.5) ** 2
+    r2 = radius * radius
 
     def acc() -> float:
         total = n300 + n100 + n50 + nmiss
@@ -65,47 +83,71 @@ def compute_live_scores(replay, beatmap) -> List[ScoreEvent]:
             return 100.0
         return 100.0 * (300 * n300 + 100 * n100 + 50 * n50) / (300 * total)
 
-    for obj in beatmap.hit_objects:
-        if obj.is_spinner:
+    def miss(at: float, x: float, y: float) -> None:
+        nonlocal combo, nmiss
+        combo = 0
+        nmiss += 1
+        events.append(ScoreEvent(at, score, 0, 0, x, y, 0.0, acc(),
+                                 n300, n100, n50, nmiss))
+
+    cur = 0          # earliest unjudged object (note lock)
+    for pt, px, py in presses:
+        # Objects whose window closed before this press are misses.
+        while cur < len(targets) and targets[cur][0] + win50 < pt:
+            t0, ox, oy = targets[cur]
+            miss(t0 + win50, ox, oy)
+            cur += 1
+        if cur >= len(targets):
+            break
+        t0, ox, oy = targets[cur]
+        dt = pt - t0
+        if dt < -win_miss:
+            continue                          # far too early: ignored
+        if (px - ox) ** 2 + (py - oy) ** 2 > r2:
+            continue                          # not on the note (note lock)
+        if dt < -win50:
+            miss(pt, ox, oy)                  # clicked too early
+            cur += 1
             continue
+        ad = abs(dt)
+        hit_val = 300 if ad <= win300 else (100 if ad <= win100 else 50)
+        if   hit_val == 300: n300 += 1
+        elif hit_val == 100: n100 += 1
+        else:                n50  += 1
+        combo += 1
+        score += round(hit_val * (1.0 + max(0, combo - 1) / 25.0))
+        events.append(ScoreEvent(pt, score, combo, hit_val, ox, oy, dt, acc(),
+                                 n300, n100, n50, nmiss))
+        cur += 1
 
-        t0 = float(obj.time)
-        lo = bisect.bisect_left(press_t, t0 - win50)
-        hi = bisect.bisect_right(press_t, t0 + win50)
+    while cur < len(targets):
+        t0, ox, oy = targets[cur]
+        miss(t0 + win50, ox, oy)
+        cur += 1
 
-        best_i  = -1
-        best_dt = float('inf')
-        for i in range(lo, hi):
-            if i in used:
-                continue
-            t, px, py = presses[i]
-            dx, dy = px - obj.x, py - obj.y
-            if dx * dx + dy * dy <= r2 and abs(t - t0) < abs(best_dt):
-                best_dt = t - t0
-                best_i  = i
+    # Misses are appended at window close, hits at press time: keep the
+    # timeline sorted for the binary-search lookups.
+    events[1:] = sorted(events[1:], key=lambda e: e.time)
+    return _recount(events)
 
-        if best_i >= 0:
-            used.add(best_i)
-            combo += 1
-            ad = abs(best_dt)
-            hit_val = 300 if ad <= win300 else (100 if ad <= win100 else 50)
-            if   hit_val == 300: n300 += 1
-            elif hit_val == 100: n100 += 1
-            else:                n50  += 1
-            score += round(hit_val * (1.0 + max(0, combo - 1) / 25.0))
-            events.append(ScoreEvent(
-                presses[best_i][0], score, combo, hit_val,
-                obj.x, obj.y, best_dt, acc(), n300, n100, n50, nmiss,
-            ))
-        else:
+
+def _recount(events: List[ScoreEvent]) -> List[ScoreEvent]:
+    """Re-derive the cumulative fields after a sort (keeps them monotonic)."""
+    score = combo = 0
+    n = {300: 0, 100: 0, 50: 0, 0: 0}
+    out = [events[0]]
+    for e in events[1:]:
+        n[e.judgment] += 1
+        if e.judgment == 0:
             combo = 0
-            nmiss += 1
-            events.append(ScoreEvent(
-                t0 + win50, score, 0, 0,
-                obj.x, obj.y, 0.0, acc(), n300, n100, n50, nmiss,
-            ))
-
-    return events
+        else:
+            combo += 1
+            score += round(e.judgment * (1.0 + max(0, combo - 1) / 25.0))
+        total = sum(n.values())
+        acc = 100.0 * (300 * n[300] + 100 * n[100] + 50 * n[50]) / (300 * total)
+        out.append(ScoreEvent(e.time, score, combo, e.judgment, e.x, e.y, e.dt,
+                              acc, n[300], n[100], n[50], n[0]))
+    return out
 
 
 # ---------------------------------------------------------------------------

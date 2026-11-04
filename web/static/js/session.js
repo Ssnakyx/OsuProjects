@@ -3,10 +3,12 @@
 
 import {
   S, OPT, $, toast, chip, landing, player,
-  clockRate, adjDifficulty, circleRadius, preemptMs,
+  clockRate, adjDifficulty, circleRadius, preemptMs, escapeHtml,
 } from "./core.js";
+import { MOD } from "./config.js";
+import { useSkinFile } from "./skin.js";
 import { api } from "./api.js";
-import { prepareSliders } from "./render.js";
+import { prepareMap } from "./render.js";
 import { prepStats } from "./stats.js";
 import { setPlaying, setSpeed, initSfx, tick } from "./playback.js";
 import { applySettings, startParticles, stopParticles } from "./settings.js";
@@ -15,16 +17,36 @@ import { saveRecentReplays } from "./recent.js";
 /* ── file intake ───────────────────────────────────────────────────── */
 
 export async function handleFiles(files) {
-  for (const f of files) {
-    const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+  // Skins first (so a replay dropped together with a skin uses it), then
+  // beatmaps, then replays — whatever order the browser lists them in.
+  const rank = f => { const e = extOf(f.name); return e === ".osk" ? 0 : (e === ".osz" || e === ".osu") ? 1 : 2; };
+  for (const f of [...files].sort((a, b) => rank(a) - rank(b))) {
+    const ext = extOf(f.name);
     if (ext === ".osr") await uploadReplay(f);
     else if (ext === ".osu" || ext === ".osz") await uploadMap(f);
+    else if (ext === ".osk") await loadSkinFile(f);
     else toast(`Unsupported file: ${f.name}`, "error");
   }
 }
 
+const extOf = name => name.toLowerCase().slice(name.lastIndexOf("."));
+
+export async function loadSkinFile(file) {
+  chip("chip-skin", "loading " + file.name + "…", "busy");
+  try {
+    const sk = await useSkinFile(file);
+    toast(`Skin loaded: ${sk.name}`, "ok");
+  } catch (e) {
+    toast("Couldn't read this skin: " + e.message, "error");
+  }
+  document.dispatchEvent(new CustomEvent("skinchange"));
+}
+
+// First free slot; with both taken, a new replay replaces the second one.
+const freeSlot = () => (!S.replays[0] ? 0 : 1);
+
 export async function postReplay(buf) {
-  return api.postReplay(buf);
+  return api.postReplay(buf, freeSlot());
 }
 
 // md5 of the beatmap the current session is built around (driven by replays).
@@ -66,7 +88,7 @@ async function uploadReplay(file) {
 }
 
 async function uploadMap(file) {
-  chip("chip-map", "uploading " + file.name + "…", "busy");
+  chip("chip-map", "reading " + file.name + "…", "busy");
   try {
     await api.uploadMap(file.name, await file.arrayBuffer());
     await fetchMap();
@@ -80,6 +102,7 @@ async function uploadMap(file) {
 
 async function fetchMap() {
   S.map = await api.getMap();
+  if (!S.map.objects || !S.map.objects.length) toast("This beatmap has no hit objects.", "warn");
   S.events = [null, null];
   chip("chip-map", `${S.map.artist} — ${S.map.title} [${S.map.version}]`, "ok");
   if (!S.map.md5Match)
@@ -124,23 +147,31 @@ export async function afterFilesChanged() {
 export function maybeStart() {
   if (!S.map || !S.replays.some(Boolean)) return;
   for (const slot of [0, 1]) if (S.replays[slot] && !S.events[slot]) return;
-  if (S.started) { enterPlayer(); return; }
   $("btn-watch").classList.remove("disabled");
+  // Files dropped while watching: reload the player in place.
+  if (!player.classList.contains("hidden")) enterPlayer();
 }
 
 /* ── enter / leave the player ──────────────────────────────────────── */
 
 export function enterPlayer() {
-  const mods0 = S.replays[0] ? S.replays[0].mods : 0;
+  // The playfield is drawn as the first replay saw it (its CS/AR/HD/HR).
+  const lead = S.replays[0] || S.replays[1];
+  const mods0 = lead ? lead.mods : 0;
   const [cs, ar] = adjDifficulty(S.map.cs, S.map.ar, S.map.od, mods0);
   S.radius = circleRadius(cs);
   S.preempt = preemptMs(ar);
-  prepareSliders();
+  S.fadeIn = 400 * Math.min(1, S.preempt / 450);
+  S.hd = !!(mods0 & MOD.HD) && OPT.hiddenFx;
+  S.hr = !!(mods0 & MOD.HR);
+  prepareMap();
 
   const objs = S.map.objects;
-  S.origin = objs.length ? objs[0].t - S.preempt - 1500 : -2000;
-  S.endT = objs.length
-    ? Math.max(...objs.map(o => o.k === "s" ? o.t + o.dur : o.k === "p" ? o.end : o.t)) + 2000 : 1;
+  S.longest = objs.reduce((m, o) => Math.max(m, o.endT - o.t), 0);
+  S.origin = objs.length ? Math.min(0, objs[0].t - S.preempt - 1500) : -2000;
+  const lastFrame = Math.max(0, ...S.replays.filter(Boolean).map(r => r.frames.length ? r.frames[r.frames.length - 1][0] : 0));
+  const lastObj = objs.reduce((m, o) => Math.max(m, o.endT), 0);
+  S.endT = Math.max(lastObj + 1500, Math.min(lastFrame, lastObj + 6000), S.origin + 1);
 
   for (const slot of [0, 1]) {
     const r = S.replays[slot];
@@ -184,7 +215,7 @@ export function enterPlayer() {
 
   const rate = clockRate(mods0);
   setSpeed(rate);
-  if (rate !== 1) toast(`${S.replays[0].modsStr} replay — speed set to ${rate}×`, "info");
+  if (rate !== 1) toast(`${lead.modsStr} replay — playing at ${rate}× like the original`, "info");
 
   S.t = S.origin; S.hitIdx = 0; S.ended = false;
   document.body.classList.add("playing");
@@ -214,7 +245,7 @@ export async function clearSession() {
   S.playing = false;
   S.replays = [null, null]; S.replayBytes = [null, null]; S.events = [null, null]; S.map = null;
   $("btn-watch").classList.add("disabled");
-  chip("chip-r0", "waiting for file…");
-  chip("chip-r1", "optional");
-  chip("chip-map", "auto-download after replay");
+  chip("chip-r0", "drop a .osr");
+  chip("chip-r1", "optional, to compare");
+  chip("chip-map", "downloads automatically");
 }

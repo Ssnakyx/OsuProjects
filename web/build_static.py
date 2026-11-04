@@ -31,10 +31,10 @@ STATIC_SRC = os.path.join(ROOT, "web", "static")
 
 # Core modules webcore.py imports (transitively). Desktop-only modules
 # (renderer/config) and server-side ones (mirror/skin) are intentionally left
-# out — the static build does its own mirror download in JS and has no skin.
+# out — the static build downloads maps and unpacks .osk skins in JS.
 CORE_MODULES = [
     "__init__.py", "mods.py", "curves.py",
-    "beatmap.py", "replay.py", "scoring.py",
+    "beatmap.py", "replay.py", "scoring.py", "webjson.py",
 ]
 
 
