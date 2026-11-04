@@ -56,4 +56,4 @@ export const OPT_UNIT = { bgDim: "%", bgBlur: "px", cursorScale: "%", trail: "%"
 
 // Bump APP_VERSION whenever a release is added to the top of PATCH_NOTES;
 // the "what's new" modal then auto-opens once for returning visitors.
-export const APP_VERSION = "3.3";
+export const APP_VERSION = "3.4";

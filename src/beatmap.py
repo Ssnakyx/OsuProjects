@@ -62,6 +62,7 @@ class Beatmap:
     audio_filename: str = ""   # from [General] AudioFilename
     background:     str = ""   # from [Events] — image filename, may be empty
     beatmapset_id:  int = 0
+    beatmap_id:     int = 0    # [Metadata] BeatmapID (0 when absent)
     stack_leniency: float = 0.7
     format_version: int = 14
 
@@ -265,6 +266,11 @@ def load_beatmap(path: str) -> Beatmap:
             elif line.startswith('BeatmapSetID:'):
                 try:
                     bm.beatmapset_id = int(line[13:].strip())
+                except ValueError:
+                    pass
+            elif line.startswith('BeatmapID:'):
+                try:
+                    bm.beatmap_id = int(line[10:].strip())
                 except ValueError:
                     pass
 

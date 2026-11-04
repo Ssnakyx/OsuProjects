@@ -30,6 +30,7 @@ class _State:
         self.beatmap_path = None
         self.beatmap = None
         self.extract_dir = None
+        self.prefer_bid = None        # difficulty asked for by a link
 
 
 ST = _State()
@@ -43,7 +44,7 @@ def _target_md5():
 
 
 def _resolve_beatmap() -> None:
-    pick = webjson.pick_candidate(ST.candidates, _target_md5())
+    pick = webjson.pick_candidate(ST.candidates, _target_md5(), ST.prefer_bid)
     if pick and (pick != ST.beatmap_path or ST.beatmap is None):
         ST.beatmap_path = pick
         ST.beatmap = load_beatmap(pick)
@@ -57,6 +58,7 @@ def clear() -> str:
     if ST.extract_dir and os.path.isdir(ST.extract_dir):
         shutil.rmtree(ST.extract_dir, ignore_errors=True)
     ST.extract_dir = None
+    ST.prefer_bid = None
     return "{}"
 
 
@@ -75,10 +77,13 @@ def load_replay_path(path: str, slot_hint: str) -> str:
     return json.dumps(webjson.replay_json(ST.replays[slot], slot))
 
 
-def ingest_osz_path(path: str) -> str:
+def ingest_osz_path(path: str, prefer_bid=None) -> str:
+    """*prefer_bid*: difficulty id from a beatmap link, used until a replay
+    tells us the exact difficulty (by MD5)."""
     dest = os.path.join(WORK, "map")
     ST.candidates = webjson.extract_osz(path, dest)
     ST.extract_dir = dest
+    ST.prefer_bid = int(prefer_bid) if prefer_bid else None
     ST.beatmap_path = None
     ST.beatmap = None
     _resolve_beatmap()
@@ -87,6 +92,7 @@ def ingest_osz_path(path: str) -> str:
 
 def ingest_osu_path(path: str) -> str:
     ST.candidates = [path]
+    ST.prefer_bid = None
     ST.beatmap_path = None
     ST.beatmap = None
     _resolve_beatmap()

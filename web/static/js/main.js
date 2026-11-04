@@ -4,7 +4,8 @@
 import { SPEED_OPTS, APP_VERSION, ICONS } from "./config.js";
 import { $, S, OPT, SKIN, toast, chip, landing, player, canvas, saveSettings, resetOptions } from "./core.js";
 import { loadSkin, removeSkin } from "./skin.js";
-import { handleFiles, clearSession, goLanding, enterPlayer, loadSkinFile } from "./session.js";
+import { handleFiles, clearSession, goLanding, enterPlayer, loadSkinFile, loadLink } from "./session.js";
+import { api, mode as backendMode } from "./api.js";
 import { setPlaying, seekTo, setSpeed, stepFrame, stepNote, jumpMiss, toggleSlowMo, skipIntro, syncAudio } from "./playback.js";
 import { bindSeekHover } from "./timeline.js";
 import {
@@ -33,7 +34,25 @@ window.addEventListener("dragover", e => e.preventDefault());
 window.addEventListener("dragleave", e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; $("dropzone").classList.remove("drag"); } });
 window.addEventListener("drop", e => {
   e.preventDefault(); dragDepth = 0; $("dropzone").classList.remove("drag");
-  if (e.dataTransfer.files.length) handleFiles([...e.dataTransfer.files]);
+  if (e.dataTransfer.files.length) { handleFiles([...e.dataTransfer.files]); return; }
+  // A link dragged from another tab (beatmap / score page).
+  const url = (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "").split("\n")[0].trim();
+  if (url && landing && !landing.classList.contains("hidden")) submitLink(url);
+});
+
+/* ── load from a link ──────────────────────────────────────────────── */
+
+async function submitLink(text) {
+  const input = $("link-input");
+  input.value = text;
+  if (await loadLink(text)) input.value = "";
+}
+$("link-form").onsubmit = e => { e.preventDefault(); const v = $("link-input").value.trim(); if (v) submitLink(v); };
+// Paste a link anywhere on the menu (outside other inputs) to load it.
+document.addEventListener("paste", e => {
+  if (landing.classList.contains("hidden") || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  const text = (e.clipboardData && e.clipboardData.getData("text") || "").trim();
+  if (text && text.length < 500) { e.preventDefault(); submitLink(text); }
 });
 
 /* ── landing buttons ───────────────────────────────────────────────── */
@@ -188,12 +207,37 @@ document.addEventListener("keydown", e => {
   }
 });
 
+/* ── Python engine status (static build) ───────────────────────────── */
+
+api.onEngine(st => {
+  const el = $("engine");
+  el.classList.remove("busy", "ok", "err");
+  if (st.state !== "idle") el.classList.add(st.state);
+  el.querySelector(".engine-txt").textContent = st.text;
+  el.querySelector(".engine-bar i").style.width = (st.state === "busy" || st.state === "ok" ? st.pct : 0) + "%";
+});
+
+backendMode().then(async m => {
+  if (m !== "static") return;
+  $("engine").classList.remove("hidden");
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    try { await navigator.serviceWorker.register(new URL("sw.js", document.baseURI)); } catch (e) { /* no SW: just slower */ }
+  }
+  // Runtime already cached → boot it right away (no download). Otherwise wait
+  // for a sign the visitor is about to load something, then start early.
+  const idle = window.requestIdleCallback || (f => setTimeout(f, 300));
+  idle(() => api.warmup({ onlyIfCached: true }));
+  const go = () => api.warmup();
+  for (const [el, ev] of [[window, "dragenter"], [$("link-input"), "focus"], [$("btn-replays"), "pointerdown"],
+    [$("btn-map"), "pointerdown"], [$("dropzone"), "pointerenter"]]) el.addEventListener(ev, go, { once: true });
+});
+
 /* ── boot ──────────────────────────────────────────────────────────── */
 
 document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ICONS[el.dataset.ic] || ""; });
 
 // A reload must start from a clean slate (the local server keeps its session).
-clearSession();
+const cleared = clearSession();
 loadSkin().then(() => document.dispatchEvent(new CustomEvent("skinchange")));
 renderSkin();
 bindSkinLibrary();
@@ -204,6 +248,12 @@ applySettings();
 if (OPT.bgParticles) startParticles();
 openDB();
 getRecent().then(renderRecent);
+
+// Shareable links: ?link=<osu! beatmap / score link or id> loads it on open.
+try {
+  const shared = new URLSearchParams(location.search).get("link");
+  if (shared) cleared.then(() => submitLink(shared));
+} catch (_) {}
 
 // Auto-open the patch notes once when the app version changes.
 try {
