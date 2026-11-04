@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#08080f">
+<meta name="theme-color" content="#141012">
 <title>osu! Replay Viewer</title>
 <meta name="description" content="Watch and compare osu!standard replays in your browser, with your own skin.">
 <link rel="stylesheet" href="static/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%2308080f'/><circle cx='50' cy='50' r='36' fill='none' stroke='%23ff5fa2' stroke-width='9'/><circle cx='50' cy='50' r='13' fill='%23ff5fa2'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M30 14h60a8 8 0 0 1 7.6 10.4l-18 56A8 8 0 0 1 72 86H12a8 8 0 0 1-7.6-10.4l18-56A8 8 0 0 1 30 14Z' fill='%23ff66ab'/><path d='M42 34v32l26-16Z' fill='%23161014'/></svg>">
 </head>
 <body>
 
@@ -27,6 +27,7 @@
     </nav>
   </header>
 
+  <div class="landing-wrap">
   <main class="landing-grid">
     <section class="hero">
       <p class="eyebrow"><span class="pulse"></span>osu!standard replay viewer</p>
@@ -41,6 +42,13 @@
     </section>
 
     <section class="loader">
+      <div class="panel-head">
+        <span class="ph-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/><path d="m16 15 4 2.5-4 2.5Z" fill="currentColor"/></svg></span>
+        <div>
+          <div class="ph-title">load <b>files</b></div>
+          <div class="ph-sub">replays, beatmaps and skins, all read in your browser</div>
+        </div>
+      </div>
       <div id="dropzone">
         <div class="dz-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg>
@@ -86,9 +94,10 @@
   </main>
 
   <section id="recent" class="hidden">
-    <div class="recent-head"><h2>Recent replays</h2><button id="btn-recent-clear" class="btn btn-mini">Clear</button></div>
+    <div class="recent-head"><h2><b>recent</b> replays</h2><button id="btn-recent-clear" class="btn btn-mini">Clear</button></div>
     <div id="recent-list"></div>
   </section>
+  </div>
 
   <footer class="landing-foot">
     <button id="btn-clear" class="btn btn-mini">Reset session</button>
@@ -232,7 +241,7 @@
 <div id="settings-modal" class="modal hidden">
   <div class="modal-card" role="dialog">
     <div class="modal-head">
-      <h2>Settings</h2>
+      <div><h2><b>settings</b></h2><div class="modal-sub">change the way the viewer looks and behaves</div></div>
       <button id="settings-close" class="icon-btn small">✕</button>
     </div>
 
@@ -299,7 +308,7 @@
 <!-- ════════ HELP ════════ -->
 <div id="help-modal" class="modal hidden">
   <div class="modal-card">
-    <div class="modal-head"><h2>Shortcuts</h2><button id="help-close" class="icon-btn small">✕</button></div>
+    <div class="modal-head"><div><h2><b>shortcuts</b></h2><div class="modal-sub">keyboard controls in the player</div></div><button id="help-close" class="icon-btn small">✕</button></div>
     <table class="keys">
       <tr><td>Space</td><td>pause / resume</td></tr>
       <tr><td>R</td><td>restart</td></tr>
@@ -321,11 +330,44 @@
 <div id="results-modal" class="modal hidden">
   <div class="modal-card results-card">
     <div class="results-head">
-      <div class="results-eyebrow">Replay complete</div>
-      <div id="results-title">—</div>
-      <div id="results-sub"></div>
+      <div>
+        <div class="results-eyebrow">Replay complete</div>
+        <div id="results-title">—</div>
+        <div id="results-sub"></div>
+      </div>
+      <button id="results-close" class="icon-btn small" aria-label="Close">✕</button>
     </div>
+
     <div id="results-grid"></div>
+
+    <section class="res-section">
+      <div class="res-sec-head">
+        <h3>performance <b>timeline</b></h3>
+        <span class="res-hint">accuracy over the map · every miss, 50 and 100 below · click to watch that moment</span>
+      </div>
+      <div class="res-chart" id="res-timeline-wrap">
+        <canvas id="res-timeline"></canvas>
+        <div id="res-tip" class="res-tip hidden"></div>
+      </div>
+    </section>
+
+    <div class="res-two">
+      <section class="res-section">
+        <div class="res-sec-head"><h3>timing <b>distribution</b></h3><span class="res-hint">early ← 0 ms → late</span></div>
+        <div class="res-chart"><canvas id="res-hist"></canvas></div>
+        <div id="res-timing"></div>
+      </section>
+      <section class="res-section">
+        <div class="res-sec-head"><h3>where it <b>went wrong</b></h3><span class="res-hint">misses, 50s and 100s on the playfield</span></div>
+        <div class="res-chart res-field-wrap"><canvas id="res-field"></canvas></div>
+      </section>
+    </div>
+
+    <section class="res-section">
+      <div class="res-sec-head"><h3>missed &amp; <b>weak hits</b></h3><span class="res-hint">click a row to rewatch it</span></div>
+      <div id="res-misses"></div>
+    </section>
+
     <div class="modal-foot">
       <button id="results-again" class="btn btn-ghost">↺&nbsp;&nbsp;Watch again</button>
       <button id="results-menu" class="btn btn-primary">Back to menu</button>
@@ -337,7 +379,7 @@
 <div id="patch-modal" class="modal hidden">
   <div class="modal-card patch-card">
     <div class="modal-head">
-      <h2>What's new</h2>
+      <div><h2>what's <b>new</b></h2><div class="modal-sub">changelog of the replay viewer</div></div>
       <button id="patch-close" class="icon-btn small">✕</button>
     </div>
     <div id="patch-body"></div>
