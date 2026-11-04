@@ -1218,67 +1218,220 @@ class Renderer:
     # ------------------------------------------------------------------
     # Cursor
     # ------------------------------------------------------------------
+    # Skin cursor, osu!-style: `cursor` (+ CursorCentre / CursorRotate /
+    # CursorExpand), `cursormiddle` on top, and a `cursortrail` that is
+    # either discrete ghosts or — with a cursormiddle — a dense "smooth"
+    # trail laid along the path. Each part falls back on its own: a missing
+    # cursor or trail gets the vector style, a 1×1 (hidden) trail means none.
+    # Trail sprites sit on an absolute time grid so they don't shimmer.
+
+    _CURSOR_SPIN_MS = 10000.0   # CursorRotate: one turn per 10 s
+    _EXPAND_SCALE   = 1.2
+    _EXPAND_MS      = 100.0
 
     def _draw_cursor(self, surf: pygame.Surface, rect: Rect, player: int) -> None:
-        if self.skin and self.skin.has("cursor"):
-            self._draw_skin_cursor(surf, rect, player)
-        else:
-            self._draw_default_cursor(
-                surf, rect, self.replays[player], config.PLAYER_COLORS[player],
-                self.current_time,
-            )
+        replay = self.replays[player]
+        color  = config.PLAYER_COLORS[player]
+        ct     = self.current_time
+        sk     = self.skin
+        duo    = len(self.replays) >= 2
+
+        # Trail: skin sprite → vector fallback when absent → none when hidden
+        if sk and sk.has("cursortrail"):
+            self._draw_skin_trail(surf, rect, replay, color if duo else None)
+        elif not (sk and sk.is_hidden("cursortrail")):
+            self._draw_default_trail(surf, rect, replay, color, ct)
+
+        head   = bool(sk and sk.has("cursor"))
+        middle = bool(sk and sk.has("cursormiddle"))
+        if not (head or middle) or not self._draw_skin_head(
+                surf, rect, replay, color if duo else None, head, middle):
+            self._draw_default_head(surf, rect, replay, color, ct)
 
     # ---- skin cursor ----
 
-    def _cursor_px(self, name: str, rect: Rect) -> int:
-        """On-screen sprite width for a cursor element (768-px reference,
-        shrunk by CURSOR_SKIN_SCALE because full size is huge)."""
+    def _cursor_k(self, rect: Rect) -> float:
+        """Screen px per 1× skin px: osu! sprites are sized for a 768-px-tall
+        screen, i.e. 1/1.6 of an osu! pixel."""
+        return self._scale(rect) / 1.6 * config.CURSOR_SKIN_SCALE
+
+    def _cursor_w(self, name: str, rect: Rect, mul: float = 1.0) -> int:
         assert self.skin
         native = self.skin.sizes.get(name, (64, 64))[0] / self.skin.scales.get(name, 1)
-        px = native * (rect[3] / 768.0) * config.CURSOR_SKIN_SCALE
-        return max(8, int(px))
+        return max(4, int(round(native * self._cursor_k(rect) * mul)))
 
-    def _draw_skin_cursor(self, surf: pygame.Surface, rect: Rect, player: int) -> None:
-        replay = self.replays[player]
-        ct     = self.current_time
-        # Tint per player only when comparing two replays
-        tint = config.PLAYER_COLORS[player] if len(self.replays) >= 2 else None
+    def _cursor_rot(self, t: float) -> float:
+        if not (self.skin and self.skin.cursor_rotate):
+            return 0.0
+        return (t / self._CURSOR_SPIN_MS * 360.0) % 360.0
 
-        trail_img = self._skin_surface(
-            "cursortrail", self._cursor_px("cursortrail", rect), tint=tint)
-        if trail_img is not None:
-            n = 14
-            for k in range(n, 0, -1):
-                px, py = cursor_at(replay.frames, ct - k * 9)
-                sp   = self._to_screen(px, py, rect)
-                frac = 1.0 - k / n
-                self._blit_center(surf, trail_img, sp, int(165 * frac ** 1.4))
+    def _cursor_sprite(
+        self, name: str, width: int, angle: float = 0.0,
+        tint: Optional[Tuple[int, int, int]] = None,
+    ) -> Optional[pygame.Surface]:
+        """Scaled (and optionally rotated) skin sprite; angle snapped to 3°."""
+        img = self._skin_surface(name, width, tint=tint)
+        q = int(round(angle / 3.0)) % 120
+        if img is None or q == 0:
+            return img
+        key = ("rot", name, width, tint, q)
+        out = self._skin_cache.get(key)
+        if out is None:
+            # pygame rotates counter-clockwise; osu! spins clockwise
+            out = pygame.transform.rotate(img, -q * 3.0)
+            self._skin_cache[key] = out
+        return out
 
-        img = self._skin_surface("cursor", self._cursor_px("cursor", rect), tint=tint)
-        if img is None:
-            self._draw_default_cursor(surf, rect, replay,
-                                      config.PLAYER_COLORS[player], ct)
-            return
-        px, py = cursor_at(replay.frames, ct)
-        self._blit_center(surf, img, self._to_screen(px, py, rect))
+    def _press_state(self, frames, t: float) -> Tuple[bool, float]:
+        """(pressed, ms since the key state last changed) at time *t*."""
+        if not frames or t < frames[0].time:
+            return False, 1e9
+        lo, hi = 0, len(frames) - 1          # last frame at or before t
+        while lo < hi:
+            mid = (lo + hi + 1) >> 1
+            if frames[mid].time <= t:
+                lo = mid
+            else:
+                hi = mid - 1
+        i = lo
+        on = (frames[i].keys & 15) != 0
+        j = i
+        while j > 0 and i - j < 60:
+            if ((frames[j - 1].keys & 15) != 0) != on:
+                return on, t - frames[j].time
+            j -= 1
+        return on, 1e9
 
-    # ---- default cursor ----
+    def _draw_skin_trail(
+        self, surf: pygame.Surface, rect: Rect, replay: Replay,
+        tint: Optional[Tuple[int, int, int]],
+    ) -> None:
+        assert self.skin
+        ct, frames = self.current_time, replay.frames
+        life   = float(config.CURSOR_SKIN_TRAIL_MS)
+        smooth = self.skin.has("cursormiddle")
+        spin   = self.skin.cursor_trail_rotate
+        width  = self._cursor_w("cursortrail", rect)
 
-    def _draw_default_cursor(
-        self,
-        surf: pygame.Surface,
-        rect: Rect,
-        replay: Replay,
+        pts: List[Tuple[float, float, float]] = []      # x, y, time
+        if not smooth:
+            g = 16.0                                     # one ghost per ~frame
+            t = math.ceil((ct - life) / g) * g
+            while t < ct:
+                ox, oy = cursor_at(frames, t)
+                sx, sy = self._to_screen(ox, oy, rect)
+                pts.append((sx, sy, t))
+                t += g
+        else:
+            spacing = max(1.5, width / 2.5)
+            g = 4.0
+            times = []
+            t = math.ceil((ct - life) / g) * g
+            while t < ct:
+                times.append(t)
+                t += g
+            times.append(ct)
+            prev = last = None
+            for t in times:
+                ox, oy = cursor_at(frames, t)
+                sx, sy = self._to_screen(ox, oy, rect)
+                p = (float(sx), float(sy), t)
+                if prev is None:
+                    pts.append(p)
+                    prev = last = p
+                    continue
+                d = math.hypot(p[0] - prev[0], p[1] - prev[1])
+                if d >= spacing:
+                    # fill the gap at even steps (depends only on the two grid points)
+                    n = min(64, int(math.ceil(d / spacing)))
+                    for j in range(1, n + 1):
+                        f = j / n
+                        pts.append((prev[0] + (p[0] - prev[0]) * f,
+                                    prev[1] + (p[1] - prev[1]) * f,
+                                    prev[2] + (p[2] - prev[2]) * f))
+                    last = p
+                elif math.hypot(p[0] - last[0], p[1] - last[1]) >= spacing:
+                    pts.append(p)
+                    last = p
+                prev = p
+            pts = pts[-600:]
+
+        for sx, sy, t in pts:
+            f = 1.0 - (ct - t) / life
+            if f <= 0:
+                continue
+            a = (f ** 1.4) * 0.9 if smooth else f * 0.85
+            img = self._cursor_sprite("cursortrail", width,
+                                      self._cursor_rot(t) if spin else 0.0, tint)
+            if img is not None:
+                self._blit_center(surf, img, (int(sx), int(sy)), int(255 * a))
+
+    def _draw_skin_head(
+        self, surf: pygame.Surface, rect: Rect, replay: Replay,
+        halo: Optional[Tuple[int, int, int]], head: bool, middle: bool,
+    ) -> bool:
+        assert self.skin
+        sk, ct = self.skin, self.current_time
+        ex = 1.0
+        if sk.cursor_expand:
+            on, age = self._press_state(replay.frames, ct)
+            k = min(1.0, max(0.0, age / self._EXPAND_MS))
+            k = 1 - (1 - k) ** 2
+            ex = 1 + (self._EXPAND_SCALE - 1) * (k if on else 1 - k)
+
+        ox, oy = cursor_at(replay.frames, ct)
+        sp = self._to_screen(ox, oy, rect)
+        img = mid = None
+        if head:
+            w = self._cursor_w("cursor", rect, ex)
+            img = self._cursor_sprite("cursor", w,
+                                      self._cursor_rot(ct) if sk.cursor_centre else 0.0)
+        if middle:
+            mid = self._cursor_sprite("cursormiddle", self._cursor_w("cursormiddle", rect))
+        if img is None and mid is None:
+            return False
+
+        if halo is not None:
+            ref = img or mid
+            self._draw_player_halo(surf, sp, max(14, int(max(ref.get_size()) * 0.55)), halo)
+        if img is not None:
+            if sk.cursor_centre:
+                self._blit_center(surf, img, sp)
+            else:
+                surf.blit(img, sp)
+        if mid is not None:
+            self._blit_center(surf, mid, sp)
+        return True
+
+    def _draw_player_halo(
+        self, surf: pygame.Surface, pos: Tuple[int, int], r: int,
         color: Tuple[int, int, int],
-        ct: float,
+    ) -> None:
+        """Player-coloured glow under a skin cursor, so two identical skin
+        cursors stay tellable apart without recolouring the skin."""
+        key = ("halo", r, color)
+        glow = self._skin_cache.get(key)
+        if glow is None:
+            glow = _alpha_surface(r * 2, r * 2)
+            steps = 10
+            for i in range(steps, 0, -1):
+                f = i / steps
+                pygame.draw.circle(glow, (*color, int(150 * (1 - f) ** 1.2 + 6)),
+                                   (r, r), max(1, int(r * f)))
+            self._skin_cache[key] = glow
+        surf.blit(glow, (pos[0] - r, pos[1] - r))
+
+    # ---- default (vector) cursor ----
+
+    def _draw_default_trail(
+        self, surf: pygame.Surface, rect: Rect, replay: Replay,
+        color: Tuple[int, int, int], ct: float,
     ) -> None:
         trail = config.CURSOR_TRAIL_LEN
         cr    = config.CURSOR_RADIUS
-
-        # Trail — tapers in size and fades to background colour
+        # Tapers in size and fades to background colour
         for k in range(trail, 0, -1):
-            t_past = ct - k * 11
-            px, py = cursor_at(replay.frames, t_past)
+            px, py = cursor_at(replay.frames, ct - k * 11)
             sp     = self._to_screen(px, py, rect)
             frac   = k / trail
             # Quadratic fade so the head end stays bright
@@ -1287,10 +1440,13 @@ class Renderer:
             sr     = max(1, int(cr * frac * 0.52))
             pygame.draw.circle(surf, c, sp, sr)
 
-        # Cursor head
+    def _draw_default_head(
+        self, surf: pygame.Surface, rect: Rect, replay: Replay,
+        color: Tuple[int, int, int], ct: float,
+    ) -> None:
+        cr = config.CURSOR_RADIUS
         px, py = cursor_at(replay.frames, ct)
         sp = self._to_screen(px, py, rect)
-
         # Soft outer glow (dim ring slightly larger than cursor)
         pygame.draw.circle(surf, _tinted(color, 0.35), sp, cr + 4, 3)
         # Filled body

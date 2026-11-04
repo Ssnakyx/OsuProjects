@@ -39,9 +39,19 @@ class Skin:
     combo_colors: List[Color] = field(default_factory=list)
     slider_border: Optional[Color] = None
     slider_track:  Optional[Color] = None
+    hidden:   set = field(default_factory=set)      # 1×1 placeholders
+    # [General] cursor flags (osu!stable defaults)
+    cursor_rotate:       bool = True
+    cursor_expand:       bool = True
+    cursor_centre:       bool = True
+    cursor_trail_rotate: bool = True
 
     def has(self, name: str) -> bool:
         return name in self.elements
+
+    def is_hidden(self, name: str) -> bool:
+        """Present in the skin but blanked out with a 1×1 image."""
+        return name in self.hidden
 
 
 def _png_size(data: bytes) -> Optional[Tuple[int, int]]:
@@ -57,8 +67,17 @@ def _parse_color(value: str) -> Optional[Color]:
     return None
 
 
+_CURSOR_FLAGS = {
+    "cursorrotate": "cursor_rotate",
+    "cursorexpand": "cursor_expand",
+    "cursorcentre": "cursor_centre",
+    "cursortrailrotate": "cursor_trail_rotate",
+}
+
+
 def _parse_ini(text: str) -> dict:
-    out: dict = {"combo": {}, "slider_border": None, "slider_track": None, "name": ""}
+    out: dict = {"combo": {}, "slider_border": None, "slider_track": None, "name": "",
+                 "flags": {}}
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("//") or ":" not in line:
@@ -75,6 +94,8 @@ def _parse_ini(text: str) -> dict:
             out["slider_border"] = out["slider_border"] or _parse_color(val)
         elif kl == "slidertrackoverride":
             out["slider_track"] = out["slider_track"] or _parse_color(val)
+        elif kl in _CURSOR_FLAGS:
+            out["flags"][_CURSOR_FLAGS[kl]] = val.split("//")[0].strip() != "0"
     return out
 
 
@@ -141,6 +162,8 @@ def _build(dest: str) -> Skin:
         sk.combo_colors = [ini["combo"][k] for k in sorted(ini["combo"])]
         sk.slider_border = ini["slider_border"]
         sk.slider_track = ini["slider_track"]
+        for attr, on in ini["flags"].items():
+            setattr(sk, attr, on)
 
     for el in ELEMENTS:
         for suffix, scale in (("@2x.png", 2), (".png", 1)):
@@ -150,7 +173,9 @@ def _build(dest: str) -> Skin:
             with open(p, "rb") as f:
                 size = _png_size(f.read(64))
             if size and (size[0] <= 2 or size[1] <= 2):
-                continue           # 1×1 placeholder → element hidden by skin
+                sk.hidden.add(el)  # 1×1 placeholder → element hidden by skin
+                continue
+            sk.hidden.discard(el)
             sk.elements[el] = p
             sk.scales[el] = scale
             if size:

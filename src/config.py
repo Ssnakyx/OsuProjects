@@ -32,7 +32,8 @@ COMBO_COLORS = [
 # ── Cursor ────────────────────────────────────────────────────────────────────
 CURSOR_TRAIL_LEN  = 28
 CURSOR_RADIUS     = 9      # vector fallback cursor
-CURSOR_SKIN_SCALE = 0.6    # shrink factor for skin cursor sprites
+CURSOR_SKIN_SCALE = 1.0    # skin cursor size (1.0 = osu! cursor size 1.0)
+CURSOR_SKIN_TRAIL_MS = 150 # how long a skin cursortrail sprite stays visible
 
 # ── Slider ────────────────────────────────────────────────────────────────────
 SLIDER_BODY  = (50, 50, 72)
