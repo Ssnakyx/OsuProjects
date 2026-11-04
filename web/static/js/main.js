@@ -96,6 +96,7 @@ $("patch-modal").onclick = e => { if (e.target === $("patch-modal")) closePatch(
 
 $("results-menu").onclick = async () => { closeResults(); await clearSession(); goLanding(); };
 $("results-again").onclick = () => { closeResults(); S.ended = false; seekTo(S.origin); setPlaying(true); };
+$("results-close").onclick = () => closeResults();
 $("results-modal").onclick = e => { if (e.target === $("results-modal")) closeResults(); };
 
 /* ── settings ──────────────────────────────────────────────────────── */

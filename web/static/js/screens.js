@@ -1,9 +1,11 @@
 /* Overlay screens: the "what's new" patch notes and the end-of-replay
    results screen (osu!-style rank, score and judgment breakdown). */
 
-import { S, $, escapeHtml } from "./core.js";
-import { APP_VERSION, MOD } from "./config.js";
+import { S, $, escapeHtml, rgba, clamp, upperBound, fmtTime, clockRate } from "./core.js";
+import { APP_VERSION, MOD, PLAYER_COLORS, JUDGE_COLORS } from "./config.js";
 import { triLayer } from "./landing-fx.js";
+import { prepStats, urAt, ppAt } from "./stats.js";
+import { seekTo, setPlaying } from "./playback.js";
 
 /* ════════ patch notes ════════ */
 
@@ -11,6 +13,11 @@ const PATCH_NOTES = [
   {
     ver: "3.1", name: "A new look", date: "2026-11-04",
     changes: [
+      { tag: "added", items: [
+        "<b>Much richer results screen</b>: an accuracy timeline with every miss, 50 and 100, the timing distribution (mean error, UR, early/late split), a playfield map of where the misses happened and a list of every missed or weak hit.",
+        "Click a moment on the timeline, or any row of the list, to <b>rewatch it</b> straight away.",
+        "Score panels now show max combo out of the map's total, pp estimate, unstable rate, mean error and a Full combo / misses badge.",
+      ]},
       { tag: "changed", items: [
         "<b>New design</b> inspired by modern rhythm-game menus: sheared buttons and bars, drifting triangles in the background, overlay-style panels and the <b>Outfit</b> typeface.",
         "The accent colour in Settings now tints the <b>whole interface</b>, not just the buttons.",
@@ -126,7 +133,11 @@ export function closePatch() {
   try { localStorage.setItem("orv-version", APP_VERSION); } catch (_) {}
 }
 
-/* ════════ results screen ════════ */
+/* ════════ results screen ════════
+   Score panels (grade ring, score, combo, pp, UR, judgments), then the
+   detailed breakdown: an accuracy timeline with every miss / 50 / 100,
+   the timing distribution, a playfield map of the bad hits and a
+   clickable list of them. Clicking a moment rewatches it. */
 
 // osu!standard letter grade from the judgment counts (silver SS/S with HD/FL).
 function gradeOf(n300, n100, n50, nMiss, mods) {
@@ -146,8 +157,12 @@ const gradeLabel = g => g.startsWith("SS") ? "SS" : g.startsWith("S") ? "S" : g;
 /* ── results animation state ── */
 const RING_SIZE = 172, RING_R = 76, RING_C = 2 * Math.PI * RING_R;
 const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const JNAME = { 0: "miss", 50: "50", 100: "100", 300: "300" };
+const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
 
 let resTris = [], resRaf = 0, resLast = 0, resTimers = [];
+let RD = null;              // data of the results currently shown
+let missFilter = "all";
 
 function resultsLoop(now) {
   const dt = Math.min(0.05, (now - resLast) / 1000); resLast = now;
@@ -169,35 +184,81 @@ function countUp(el, target, dur, delay, fmt) {
   })(performance.now());
 }
 
-export function showResults() {
-  const slots = [0, 1].filter(s => S.replays[s] && S.events[s]);
-  if (!slots.length) return;
-  stopResultsFx();
+/* Size a canvas to its CSS box (HiDPI aware) and return a ready context. */
+function fitCanvas(cv) {
+  const w = cv.clientWidth, h = cv.clientHeight, d = DPR();
+  if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) {
+    cv.width = Math.round(w * d); cv.height = Math.round(h * d);
+  }
+  const g = cv.getContext("2d");
+  g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return { g, w, h };
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const relTime = t => fmtTime(t - S.origin);
+const signedMs = v => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + " ms";
 
-  $("results-title").textContent = `${S.map.artist} — ${S.map.title}`;
-  $("results-sub").textContent = `[${S.map.version}]  ·  mapped by ${S.map.creator}`;
+/* Index (1-based) of the hit object an event belongs to. */
+function noteIndex(t) {
+  const objs = S.map.objects;
+  let lo = 0, hi = objs.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (objs[m].t < t - 1) lo = m + 1; else hi = m; }
+  if (lo > 0 && Math.abs(objs[lo - 1].t - t) < Math.abs(objs[lo].t - t)) lo--;
+  return lo + 1;
+}
 
-  const grid = $("results-grid");
-  grid.classList.toggle("two", slots.length > 1);
+/* Everything the results screen shows for one replay. */
+function analyse(slot) {
+  prepStats(slot);
+  const r = S.replays[slot];
+  const ed = S.events[slot];
+  const evs = ed.events;
+  const ev = evs[evs.length - 1] || [];
+  const score = ev[1] || 0, acc = ev[3] != null ? ev[3] : 100;
+  const n300 = ev[8] || 0, n100 = ev[9] || 0, n50 = ev[10] || 0, nMiss = ev[11] || 0;
+  let maxCombo = 0, sum = 0, n = 0, early = 0, late = 0;
+  const bad = [];
+  for (let i = 0; i < evs.length; i++) {
+    const e = evs[i];
+    if (e[2] > maxCombo) maxCombo = e[2];
+    if (e[4] > 0) { sum += e[7]; n++; if (e[7] < 0) early++; else late++; }
+    if (e[4] !== 300 && e[4] >= 0) {
+      bad.push({ t: e[0], j: e[4], dt: e[7], x: e[5], y: e[6], combo: i > 0 ? evs[i - 1][2] : 0, slot });
+    }
+  }
+  const rate = clockRate(r.mods);
+  const mapMax = S.map.objects.filter(o => o.k !== "p").length || maxCombo;
+  const endT = evs.length ? evs[evs.length - 1][0] + 1 : S.endT;
+  return {
+    slot, r, evs, windows: ed.windows, score, acc, n300, n100, n50, nMiss, maxCombo, mapMax,
+    g: gradeOf(n300, n100, n50, nMiss, r.mods),
+    ur: urAt(slot, endT), pp: ppAt(slot, endT),
+    mean: n ? sum / n / rate : 0, early: n ? early / n : 0, late: n ? late / n : 0,
+    bad,
+  };
+}
 
-  const data = slots.map(slot => {
-    const r = S.replays[slot];
-    const evs = S.events[slot].events;
-    const ev = evs[evs.length - 1] || [];
-    const score = ev[1] || 0, acc = ev[3] != null ? ev[3] : 100;
-    const n300 = ev[8] || 0, n100 = ev[9] || 0, n50 = ev[10] || 0, nMiss = ev[11] || 0;
-    let maxCombo = 0;
-    for (const e of evs) if (e[2] > maxCombo) maxCombo = e[2];
-    return { slot, r, score, acc, n300, n100, n50, nMiss, maxCombo, g: gradeOf(n300, n100, n50, nMiss, r.mods) };
-  });
+/* ── score panel ───────────────────────────────────────────────────── */
 
-  grid.innerHTML = data.map(d => `
+function cardHtml(d) {
+  const total = d.n300 + d.n100 + d.n50 + d.nMiss || 1;
+  const fc = d.nMiss === 0;
+  const badge = fc
+    ? `<span class="res-badge fc">${d.n100 + d.n50 === 0 ? "perfect" : "full combo"}</span>`
+    : `<span class="res-badge miss">${d.nMiss} miss${d.nMiss > 1 ? "es" : ""}</span>`;
+  const mods = (d.r.modsStr || "").match(/.{2}/g) || [];
+  const j = (cls, label, v) => `
+    <div class="j ${cls}">
+      <div class="j-top"><span>${label}</span><b>${v}</b></div>
+      <div class="j-bar"><i style="--w:${(v / total * 100).toFixed(1)}%"></i></div>
+    </div>`;
+  return `
     <div class="res-card" style="--pc: var(--p${d.slot})">
       <canvas class="res-tri" aria-hidden="true"></canvas>
       <div class="res-inner">
-        <div class="res-player">${escapeHtml(d.r.player)}${d.r.modsStr ? `<span class="res-mods">+${escapeHtml(d.r.modsStr)}</span>` : ""}</div>
         <div class="grade-ring gr-${d.g}">
-          <svg viewBox="0 0 ${RING_SIZE} ${RING_SIZE}" width="${RING_SIZE}" height="${RING_SIZE}">
+          <svg viewBox="0 0 ${RING_SIZE} ${RING_SIZE}">
             <circle class="ring-bg" cx="${RING_SIZE / 2}" cy="${RING_SIZE / 2}" r="${RING_R}"></circle>
             <circle class="ring-fg" cx="${RING_SIZE / 2}" cy="${RING_SIZE / 2}" r="${RING_R}"
                     stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"></circle>
@@ -208,22 +269,335 @@ export function showResults() {
             <span class="ring-acc">0.00%</span>
           </div>
         </div>
-        <div class="res-score">0</div>
-        <div class="res-score-label">score</div>
-        <div class="res-stats">
-          <div><span>Max Combo</span><b class="res-combo">0x</b></div>
-          <div><span>Accuracy</span><b>${d.acc.toFixed(2)}%</b></div>
-        </div>
-        <div class="res-judge">
-          <div class="j j300"><span>300</span><b>${d.n300}</b></div>
-          <div class="j j100"><span>100</span><b>${d.n100}</b></div>
-          <div class="j j50"><span>50</span><b>${d.n50}</b></div>
-          <div class="j jmiss"><span>MISS</span><b>${d.nMiss}</b></div>
+        <div class="res-main">
+          <div class="res-player">
+            <span class="res-av">${escapeHtml((d.r.player || "?").trim().charAt(0).toUpperCase() || "?")}</span>
+            <span class="res-name">${escapeHtml(d.r.player)}</span>
+            ${mods.map(m => `<span class="mod mod-${m}">${m}</span>`).join("")}
+            ${badge}
+          </div>
+          <div class="res-score">0</div>
+          <div class="res-stats">
+            <div><span>Max combo</span><b class="res-combo">0x</b><em>/ ${d.mapMax}x</em></div>
+            <div><span>pp</span><b>≈${Math.round(d.pp)}</b></div>
+            <div><span>Unstable rate</span><b>${d.ur.toFixed(1)}</b></div>
+            <div><span>Mean error</span><b>${signedMs(d.mean)}</b><em>${Math.abs(d.mean) < 1 ? "centred" : d.mean > 0 ? "late" : "early"}</em></div>
+          </div>
         </div>
       </div>
+      <div class="res-judge">
+        ${j("j300", "300", d.n300)}${j("j100", "100", d.n100)}${j("j50", "50", d.n50)}${j("jmiss", "miss", d.nMiss)}
+      </div>
+    </div>`;
+}
+
+/* ── accuracy timeline ─────────────────────────────────────────────── */
+
+const TL = { pad: { l: 44, r: 14, t: 14 }, lane: 18, axis: 22, hoverX: null };
+
+function tlRange() {
+  const objs = S.map.objects;
+  const t0 = objs.length ? objs[0].t - 400 : S.origin;
+  let t1 = objs.length ? objs[objs.length - 1].endT : S.endT;
+  for (const d of RD) if (d.evs.length) t1 = Math.max(t1, d.evs[d.evs.length - 1][0]);
+  return [t0, t1 + 400];
+}
+
+function drawTimeline() {
+  const cv = $("res-timeline");
+  if (!cv || !RD) return;
+  const { g, w, h } = fitCanvas(cv);
+  const { pad, lane, axis } = TL;
+  const lanesH = RD.length * lane + 6;
+  const gx0 = pad.l, gx1 = w - pad.r, gy0 = pad.t, gy1 = h - axis - lanesH - 8;
+  const [t0, t1] = tlRange();
+  const X = t => gx0 + (t - t0) / (t1 - t0 || 1) * (gx1 - gx0);
+  TL.geom = { gx0, gx1, t0, t1, X };
+
+  // accuracy scale: ignore the noisy first few hits when choosing the floor
+  let lo = 100;
+  for (const d of RD) {
+    const skip = Math.max(3, Math.floor(d.evs.length * 0.05));
+    for (let i = skip; i < d.evs.length; i++) lo = Math.min(lo, d.evs[i][3]);
+  }
+  lo = Math.max(0, Math.floor((lo - 0.5) / 5) * 5);
+  if (lo > 95) lo = 95;
+  const Y = a => gy1 - (clamp(a, lo, 100) - lo) / (100 - lo) * (gy1 - gy0);
+
+  const dim = css("--dim") || "#999", stroke = "rgba(255,255,255,.07)";
+  g.font = `600 10.5px ${css("--font-sans") || "sans-serif"}`;
+
+  // grid + y labels
+  g.textAlign = "right"; g.textBaseline = "middle";
+  const ticks = [lo, (lo + 100) / 2, 100];
+  for (const a of ticks) {
+    const y = Math.round(Y(a)) + .5;
+    g.strokeStyle = stroke; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(gx0, y); g.lineTo(gx1, y); g.stroke();
+    g.fillStyle = dim; g.fillText((a % 1 ? a.toFixed(1) : a) + "%", gx0 - 8, y);
+  }
+
+  // miss columns (faint, behind the lines)
+  for (const d of RD) {
+    g.fillStyle = rgba(JUDGE_COLORS[0], RD.length > 1 ? .10 : .14);
+    for (const b of d.bad) if (b.j === 0) g.fillRect(Math.round(X(b.t)) - 1, gy0, 2, gy1 - gy0);
+  }
+
+  // accuracy lines with a soft fill
+  for (const d of RD) {
+    const col = PLAYER_COLORS[d.slot];
+    if (!d.evs.length) continue;
+    let pf = 100;
+    g.beginPath();
+    g.moveTo(X(t0), Y(100));
+    for (const e of d.evs) { g.lineTo(X(e[0]), Y(pf)); g.lineTo(X(e[0]), Y(e[3])); pf = e[3]; }
+    g.lineTo(X(t1), Y(pf));
+    const grad = g.createLinearGradient(0, gy0, 0, gy1);
+    grad.addColorStop(0, rgba(col, RD.length > 1 ? .14 : .24)); grad.addColorStop(1, rgba(col, 0));
+    g.save(); g.lineTo(X(t1), gy1); g.lineTo(X(t0), gy1); g.closePath();
+    g.fillStyle = grad; g.fill(); g.restore();
+    // stroke as steps
+    g.beginPath();
+    let prev = 100;
+    g.moveTo(X(t0), Y(100));
+    for (const e of d.evs) { g.lineTo(X(e[0]), Y(prev)); g.lineTo(X(e[0]), Y(e[3])); prev = e[3]; }
+    g.lineTo(X(t1), Y(prev));
+    g.strokeStyle = rgba(col, 1); g.lineWidth = 2; g.lineJoin = "round";
+    g.shadowColor = rgba(col, .6); g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0;
+  }
+
+  // judgment lanes
+  RD.forEach((d, i) => {
+    const ly = gy1 + 10 + i * lane, lh = lane - 4;
+    g.fillStyle = "rgba(255,255,255,.04)";
+    g.fillRect(gx0, ly, gx1 - gx0, lh);
+    g.fillStyle = rgba(PLAYER_COLORS[d.slot], 1);
+    g.fillRect(gx0 - 6, ly, 3, lh);
+    for (const b of d.bad) {
+      const x = Math.round(X(b.t));
+      const hh = b.j === 0 ? lh : b.j === 50 ? lh * .72 : lh * .45;
+      g.fillStyle = rgba(JUDGE_COLORS[b.j], b.j === 100 ? .75 : 1);
+      g.fillRect(x - (b.j === 0 ? 1.5 : 1), ly + lh - hh, b.j === 0 ? 3 : 2, hh);
+    }
+  });
+
+  // time axis
+  g.textAlign = "center"; g.textBaseline = "top"; g.fillStyle = dim;
+  const span = (t1 - t0) / 1000;
+  const step = [5, 10, 15, 30, 60, 120, 300].find(s => span / s <= 8) || 600;
+  const first = Math.ceil((t0 - S.origin) / 1000 / step) * step;
+  for (let s = first; S.origin + s * 1000 <= t1; s += step) {
+    const x = X(S.origin + s * 1000);
+    g.fillText(fmtTime(s * 1000), x, h - axis + 6);
+    g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(Math.round(x), h - axis, 1, 4); g.fillStyle = dim;
+  }
+
+  // hover cursor
+  if (TL.hoverX != null) {
+    const x = clamp(TL.hoverX, gx0, gx1);
+    g.fillStyle = "rgba(255,255,255,.6)";
+    g.fillRect(Math.round(x), gy0, 1, h - axis - gy0);
+  }
+}
+
+function timelineTip(e) {
+  const cv = $("res-timeline"), tip = $("res-tip");
+  if (!TL.geom) return;
+  const r = cv.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const { gx0, gx1, t0, t1 } = TL.geom;
+  if (x < gx0 - 4 || x > gx1 + 4) { timelineLeave(); return; }
+  TL.hoverX = x; drawTimeline();
+  const t = t0 + (clamp(x, gx0, gx1) - gx0) / (gx1 - gx0) * (t1 - t0);
+  const near = nearestBad(t, (t1 - t0) / (gx1 - gx0) * 6);
+  const rows = RD.map(d => {
+    const i = upperBound(d.evs, t) - 1;
+    const ev = i >= 0 ? d.evs[i] : null;
+    return `<div><i style="background:${rgba(PLAYER_COLORS[d.slot], 1)}"></i>${escapeHtml(d.r.player)}<span>${ev ? ev[3].toFixed(2) : "100.00"}% · ${ev ? ev[2] : 0}x</span></div>`;
+  }).join("");
+  tip.innerHTML = `<b>${relTime(near ? near.t : t)}</b>${near ? `<em class="jt j${near.j}">${JNAME[near.j]} · ${escapeHtml(S.replays[near.slot].player)}</em>` : ""}${rows}<small>click to watch</small>`;
+  tip.classList.remove("hidden");
+  const tw = tip.offsetWidth;
+  tip.style.left = clamp(x + 14, 4, r.width - tw - 4) + "px";
+  if (x + 14 + tw > r.width) tip.style.left = Math.max(4, x - tw - 14) + "px";
+}
+function timelineLeave() { TL.hoverX = null; $("res-tip").classList.add("hidden"); drawTimeline(); }
+function nearestBad(t, tol) {
+  let best = null, bd = tol;
+  for (const d of RD) for (const b of d.bad) { const dd = Math.abs(b.t - t); if (dd <= bd) { bd = dd; best = b; } }
+  return best;
+}
+function timelineClick(e) {
+  if (!TL.geom) return;
+  const r = $("res-timeline").getBoundingClientRect();
+  const { gx0, gx1, t0, t1 } = TL.geom;
+  const x = clamp(e.clientX - r.left, gx0, gx1);
+  const t = t0 + (x - gx0) / (gx1 - gx0) * (t1 - t0);
+  const near = nearestBad(t, (t1 - t0) / (gx1 - gx0) * 6);
+  watchAt(near ? near.t : t);
+}
+
+/* ── timing distribution ───────────────────────────────────────────── */
+
+function drawHist() {
+  const cv = $("res-hist");
+  if (!cv || !RD) return;
+  const { g, w, h } = fitCanvas(cv);
+  const win = RD[0].windows, w50 = win[2];
+  const axis = 20, top = 8, gh = h - axis - top;
+  const BINS = 41;
+  const per = RD.map(d => {
+    const arr = new Array(BINS).fill(0);
+    for (const e of d.evs) if (e[4] > 0) arr[clamp(Math.round((e[7] / w50 + 1) / 2 * (BINS - 1)), 0, BINS - 1)]++;
+    return arr;
+  });
+  const maxc = Math.max(1, ...per.flat());
+  const cx = w / 2, zw = ms => (w / 2) * Math.min(1, ms / w50);
+  const zone = (ms, col, a) => { g.fillStyle = rgba(col, a); g.fillRect(cx - zw(ms), top, zw(ms) * 2, gh); };
+  zone(w50, JUDGE_COLORS[50], .07); zone(win[1], JUDGE_COLORS[100], .08); zone(win[0], JUDGE_COLORS[300], .10);
+
+  const bw = w / BINS;
+  per.forEach((arr, si) => {
+    const col = PLAYER_COLORS[RD[si].slot];
+    const off = RD.length > 1 ? (si ? bw * .25 : -bw * .25) : 0, bwid = RD.length > 1 ? bw * .5 - 1 : bw - 2;
+    for (let b = 0; b < BINS; b++) {
+      if (!arr[b]) continue;
+      const bh = Math.max(2, arr[b] / maxc * (gh - 4));
+      g.fillStyle = rgba(col, .9);
+      const x = b * bw + (bw - bwid) / 2 + off;
+      g.beginPath(); g.roundRect ? g.roundRect(x, top + gh - bh, bwid, bh, [2, 2, 0, 0]) : g.rect(x, top + gh - bh, bwid, bh); g.fill();
+    }
+  });
+  // centre + mean markers
+  g.fillStyle = "rgba(255,255,255,.55)"; g.fillRect(Math.round(cx), top, 1, gh);
+  for (const d of RD) {
+    const mx = cx + clamp(d.mean * clockRate(d.r.mods) / w50, -1, 1) * w / 2;
+    g.fillStyle = rgba(PLAYER_COLORS[d.slot], 1);
+    g.beginPath(); g.moveTo(mx, top + gh + 2); g.lineTo(mx - 5, top + gh + 9); g.lineTo(mx + 5, top + gh + 9); g.closePath(); g.fill();
+  }
+  // window labels
+  g.font = `600 10px ${css("--font-sans") || "sans-serif"}`; g.textAlign = "center"; g.textBaseline = "top";
+  for (const [ms, col] of [[win[0], JUDGE_COLORS[300]], [win[1], JUDGE_COLORS[100]], [w50, JUDGE_COLORS[50]]]) {
+    g.fillStyle = rgba(col, .85);
+    const lbl = "±" + Math.round(ms / (RD[0] ? clockRate(RD[0].r.mods) : 1));
+    g.fillText(lbl, clamp(cx + zw(ms), 14, w - 14), top + gh + 9);
+    g.fillText(lbl, clamp(cx - zw(ms), 14, w - 14), top + gh + 9);
+  }
+
+  $("res-timing").innerHTML = RD.map(d => `
+    <div class="tm-row">
+      <span class="tm-name"><i style="background:${rgba(PLAYER_COLORS[d.slot], 1)}"></i>${escapeHtml(d.r.player)}</span>
+      <span>mean <b>${signedMs(d.mean)}</b></span>
+      <span>UR <b>${d.ur.toFixed(1)}</b></span>
+      <span class="tm-split"><em style="--e:${(d.early * 100).toFixed(1)}%"></em><b>${Math.round(d.early * 100)}%</b> early · <b>${Math.round(d.late * 100)}%</b> late</span>
     </div>`).join("");
+}
+
+/* ── playfield map of bad hits ─────────────────────────────────────── */
+
+function drawField() {
+  const cv = $("res-field");
+  if (!cv || !RD) return;
+  const { g, w, h } = fitCanvas(cv);
+  const sc = Math.min((w - 20) / 512, (h - 20) / 384);
+  const ox = (w - 512 * sc) / 2, oy = (h - 384 * sc) / 2;
+  const P = (x, y) => [ox + x * sc, oy + y * sc];
+  g.strokeStyle = "rgba(255,255,255,.1)"; g.lineWidth = 1;
+  g.strokeRect(Math.round(ox) + .5, Math.round(oy) + .5, Math.round(512 * sc), Math.round(384 * sc));
+  g.fillStyle = "rgba(255,255,255,.07)";
+  for (const o of S.map.objects) {
+    if (o.k === "p") continue;
+    const [x, y] = P(o.x, o.y);
+    g.beginPath(); g.arc(x, y, 2.2, 0, Math.PI * 2); g.fill();
+  }
+  const order = { 100: 0, 50: 1, 0: 2 };
+  const all = RD.flatMap(d => d.bad).sort((a, b) => order[a.j] - order[b.j]);
+  for (const b of all) {
+    const [x, y] = P(b.x, b.y);
+    const pc = PLAYER_COLORS[b.slot];
+    if (b.j === 0) {
+      const r = 5.5;
+      g.strokeStyle = rgba(JUDGE_COLORS[0], 1); g.lineWidth = 2.4; g.lineCap = "round";
+      g.beginPath(); g.moveTo(x - r, y - r); g.lineTo(x + r, y + r); g.moveTo(x + r, y - r); g.lineTo(x - r, y + r); g.stroke();
+      if (RD.length > 1) { g.fillStyle = rgba(pc, 1); g.beginPath(); g.arc(x, y, 2, 0, Math.PI * 2); g.fill(); }
+    } else {
+      g.fillStyle = rgba(JUDGE_COLORS[b.j], b.j === 50 ? .95 : .7);
+      g.beginPath(); g.arc(x, y, b.j === 50 ? 4 : 3, 0, Math.PI * 2); g.fill();
+      if (RD.length > 1) { g.strokeStyle = rgba(pc, .9); g.lineWidth = 1.2; g.stroke(); }
+    }
+  }
+}
+
+/* ── list of misses / weak hits ────────────────────────────────────── */
+
+function renderMisses() {
+  const box = $("res-misses");
+  const keep = b => missFilter === "all" ? true : b.j === +missFilter;
+  const counts = { all: 0, 0: 0, 50: 0, 100: 0 };
+  for (const d of RD) for (const b of d.bad) { counts.all++; counts[b.j]++; }
+  const tabs = [["all", "All"], ["0", "Misses"], ["50", "50s"], ["100", "100s"]].map(([k, l]) =>
+    `<button class="mf ${missFilter === k ? "on" : ""}" data-f="${k}">${l}<span>${counts[k]}</span></button>`).join("");
+  const col = d => {
+    const rows = d.bad.filter(keep);
+    const body = rows.length ? rows.slice(0, 300).map(b => `
+      <button class="mrow" data-t="${b.t}">
+        <span class="mj j${b.j}">${JNAME[b.j]}</span>
+        <span class="mt">${relTime(b.t)}</span>
+        <span class="mn">note ${noteIndex(b.t)}</span>
+        <span class="md">${b.j === 0 ? (b.combo ? `broke a <b>${b.combo}x</b> combo` : "no combo lost") : `${signedMs(b.dt / clockRate(d.r.mods))} <em>${b.dt < 0 ? "early" : "late"}</em>`}</span>
+        <span class="mgo" aria-hidden="true">›</span>
+      </button>`).join("") + (rows.length > 300 ? `<div class="mempty">… and ${rows.length - 300} more</div>` : "")
+      : `<div class="mempty">${missFilter === "0" || (missFilter === "all" && !d.nMiss && !d.bad.length) ? "Nothing here, clean run!" : "Nothing in this category."}</div>`;
+    return `<div class="mcol" style="--pc: var(--p${d.slot})">
+      ${RD.length > 1 ? `<div class="mcol-head"><i></i>${escapeHtml(d.r.player)}</div>` : ""}
+      <div class="mlist">${body}</div></div>`;
+  };
+  box.innerHTML = `<div class="mtabs">${tabs}</div><div class="mcols ${RD.length > 1 ? "two" : ""}">${RD.map(col).join("")}</div>`;
+  box.querySelectorAll(".mf").forEach(b => b.onclick = () => { missFilter = b.dataset.f; renderMisses(); });
+  box.querySelectorAll(".mrow").forEach(b => b.onclick = () => watchAt(+b.dataset.t));
+}
+
+/* Jump back into the replay a little before `t`. */
+function watchAt(t) {
+  closeResults();
+  S.ended = false;
+  seekTo(Math.max(S.origin, t - 1500));
+  setPlaying(true);
+}
+
+function drawCharts() { drawTimeline(); drawHist(); drawField(); }
+let chartsBound = false;
+function bindCharts() {
+  if (chartsBound) return;
+  chartsBound = true;
+  const cv = $("res-timeline");
+  cv.addEventListener("mousemove", timelineTip);
+  cv.addEventListener("mouseleave", timelineLeave);
+  cv.addEventListener("click", timelineClick);
+  window.addEventListener("resize", () => { if (RD && !$("results-modal").classList.contains("hidden")) drawCharts(); });
+}
+
+export function showResults() {
+  const slots = [0, 1].filter(s => S.replays[s] && S.events[s]);
+  if (!slots.length) return;
+  stopResultsFx();
+
+  $("results-title").textContent = `${S.map.artist} — ${S.map.title}`;
+  $("results-sub").textContent = `[${S.map.version}]  ·  mapped by ${S.map.creator}`;
+
+  const data = slots.map(analyse);
+  RD = data;
+  missFilter = "all";
+
+  const grid = $("results-grid");
+  grid.classList.toggle("two", slots.length > 1);
+  grid.innerHTML = data.map(cardHtml).join("");
 
   $("results-modal").classList.remove("hidden");
+  $("results-modal").querySelector(".modal-card").scrollTop = 0;
+  bindCharts();
+  renderMisses();
+  requestAnimationFrame(drawCharts);
 
   // Reveal each card with a stagger: triangles drift, the accuracy ring
   // sweeps in, the grade pops and the score / combo / accuracy count up.
@@ -231,7 +605,7 @@ export function showResults() {
     const d = data[i];
     const delay = 180 + i * 260;
     const cv = card.querySelector(".res-tri");
-    if (cv) resTris.push(triLayer(cv, { count: 7, color: "rgba(255,255,255,.05)", speed: 0.6, maxSize: 90, opacity: 0.6 }));
+    if (cv) resTris.push(triLayer(cv, { count: 8, color: "rgba(255,255,255,.04)", speed: 0.6, maxSize: 110, opacity: 0.7 }));
 
     const ring = card.querySelector(".grade-ring");
     const fg = ring.querySelector(".ring-fg");
@@ -239,6 +613,7 @@ export function showResults() {
     const scoreEl = card.querySelector(".res-score");
     const comboEl = card.querySelector(".res-combo");
     const target = RING_C * (1 - d.acc / 100);
+    card.querySelectorAll(".j-bar i").forEach(b => resTimers.push(setTimeout(() => b.classList.add("show"), delay + 300)));
 
     if (reduceMotion()) {
       fg.style.strokeDashoffset = target;
@@ -263,4 +638,4 @@ export function showResults() {
     else { resLast = performance.now(); resRaf = requestAnimationFrame(resultsLoop); }
   }
 }
-export function closeResults() { stopResultsFx(); $("results-modal").classList.add("hidden"); }
+export function closeResults() { stopResultsFx(); $("results-modal").classList.add("hidden"); $("res-tip").classList.add("hidden"); }

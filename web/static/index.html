@@ -330,11 +330,44 @@
 <div id="results-modal" class="modal hidden">
   <div class="modal-card results-card">
     <div class="results-head">
-      <div class="results-eyebrow">Replay complete</div>
-      <div id="results-title">—</div>
-      <div id="results-sub"></div>
+      <div>
+        <div class="results-eyebrow">Replay complete</div>
+        <div id="results-title">—</div>
+        <div id="results-sub"></div>
+      </div>
+      <button id="results-close" class="icon-btn small" aria-label="Close">✕</button>
     </div>
+
     <div id="results-grid"></div>
+
+    <section class="res-section">
+      <div class="res-sec-head">
+        <h3>performance <b>timeline</b></h3>
+        <span class="res-hint">accuracy over the map · every miss, 50 and 100 below · click to watch that moment</span>
+      </div>
+      <div class="res-chart" id="res-timeline-wrap">
+        <canvas id="res-timeline"></canvas>
+        <div id="res-tip" class="res-tip hidden"></div>
+      </div>
+    </section>
+
+    <div class="res-two">
+      <section class="res-section">
+        <div class="res-sec-head"><h3>timing <b>distribution</b></h3><span class="res-hint">early ← 0 ms → late</span></div>
+        <div class="res-chart"><canvas id="res-hist"></canvas></div>
+        <div id="res-timing"></div>
+      </section>
+      <section class="res-section">
+        <div class="res-sec-head"><h3>where it <b>went wrong</b></h3><span class="res-hint">misses, 50s and 100s on the playfield</span></div>
+        <div class="res-chart res-field-wrap"><canvas id="res-field"></canvas></div>
+      </section>
+    </div>
+
+    <section class="res-section">
+      <div class="res-sec-head"><h3>missed &amp; <b>weak hits</b></h3><span class="res-hint">click a row to rewatch it</span></div>
+      <div id="res-misses"></div>
+    </section>
+
     <div class="modal-foot">
       <button id="results-again" class="btn btn-ghost">↺&nbsp;&nbsp;Watch again</button>
       <button id="results-menu" class="btn btn-primary">Back to menu</button>
